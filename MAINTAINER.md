@@ -114,6 +114,17 @@ pwsh -NoProfile -File .privacy-tools\Invoke-PrivacyCheck.ps1 -Repo . -Mode Stage
 - 两版公开文档使用相同的事实字段：运行命令、路径、配置键、版本、接口与许可标识保持一致，代码标识（含产品字符串 `⤷ 来源：`）不翻译。
 - 同一变更同时更新两个语言版本；暂未完成翻译时在两版入口注明缺项与适用版本。
 
+### GitHub 仓库元数据（英文，按平台语言倾向维护）
+
+| 字段 | 当前值（2026-10-07 设置并回读核对） |
+|---|---|
+| About（`description`） | `DSH (DeepSeek Harness) plugin for people who fork sessions: it labels each fork with the conversation it came from — a title prefix (⤷ 来源：) plus a sidebar badge that survives renaming. Zero dependencies; v0.1.2, MIT.` |
+| Topics | `cordis`、`deepseek-harness`、`dsh`、`dsh-plugin`、`fork`、`session` |
+
+- 改法：`gh api -X PATCH /repos/<owner>/<repo> --input <json>`（About）与 `gh api -X PUT /repos/<owner>/<repo>/topics --input <json>`（topics）。**用 UTF-8 JSON 文件而不是命令行参数** —— Windows 下把中文与破折号当参数传会走样。两者都需要能联网的凭据（本机由 `gh` 提供）。
+- About 按母库规则写英文：一到两句讲清**做什么、给谁用、当前状态**，不留占位；版本号与许可标识必须与 README 一致，改动时同步改这里。
+- Topics 的选法有依据、不自造：`deepseek-harness` / `dsh` / `dsh-plugin` 是生态通用三件套（官方仓库 `deepseek-ai/deepseek-harness` 与精选列表 `awesome-dsh-plugin` 都在用），`cordis` 取自官方仓库（DSH 的插件框架，本插件确实是 Cordis 插件），`session` / `fork` 取自同类插件 `vlln/dsh-autofork`。
+
 ### 公开前核对
 
 1. 占位字段：README 两版均无 `{{…}}` 占位；快速开始的分叉→改名两步已在**真实 GUI** 上由用户目视确认（2026-10-07）。
