@@ -1,0 +1,31 @@
+{
+  "name": "dsh-plugin-branch-origin",
+  "version": "0.1.0",
+  "description": "分支联系：给 DSH 里分叉出来的会话标上它来自哪个对话 —— 分支标题带上「⤷ 来源：<源会话标题>」。零依赖、纯宿主半边、不需要构建链。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "check": "node --check lib/index.js",
+    "test": "node --test --test-isolation=none \"tests/*.test.mjs\"",
+    "test:isolated": "node --test \"tests/*.test.mjs\"",
+    "rm-test": "node --import ./test/register.mjs .verify/real-machine.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

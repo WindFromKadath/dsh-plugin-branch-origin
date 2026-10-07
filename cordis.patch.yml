@@ -1,0 +1,18 @@
+# dsh-plugin-branch-origin — this bundle's patch layer.
+#
+# One host-side row, no model-facing tools:
+#   branch-origin  label every freshly forked session with the conversation it
+#                  came from. Listens on `session/created` (+ `session/title`
+#                  writes) and rewrites the child title to
+#                  `⤷ 来源：<source session title>`.
+#
+# The row references this package by name so Node resolution finds the installed
+# code; behaviour comes from ./lib/index.js.
+#
+# No `config:` block on purpose: the row carries no options, and the module
+# declares no schemastery `Config` (this plugin imports nothing at all, so that
+# it can be installed through a junction into a profile without ERR_MODULE_NOT_FOUND).
+
+- insert:
+    - id: branch-origin
+      name: dsh-plugin-branch-origin

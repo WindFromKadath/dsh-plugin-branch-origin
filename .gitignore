@@ -1,0 +1,24 @@
+# 依赖与缓存
+node_modules/
+.npm-cache/
+.pnpm-store/
+
+# 本地临时/探针
+*.log
+.plugin-manager/
+_zstd_probe*
+
+# 凭证与环境（任何情况下都不入库）
+*.credentials*
+credentials.yaml
+.env
+.env.*
+
+# 验证证据：含对话内容、会话 id、profile 快照 —— 一律不入库
+# 保留入库：.verify/*.md（报告）与 .verify/*.mjs（一次性运行时装置）
+.verify/*.jsonl
+.verify/*.yml
+.verify/*.txt
+.verify/*.png
+.verify/home/
+.verify/proj/

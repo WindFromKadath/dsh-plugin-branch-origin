@@ -1,0 +1,5 @@
+id,goal,acceptance,scope,status,evidence,verified_revision,verified_at
+B001,GitHub 先行者核查：「给分叉标来源」是否已有人做过,给出结论 + 逐仓库表格 + 差异点；每条带链接,docs/PRIOR-ART.md,done,docs/PRIOR-ART.md（2026-10-07 只读 web 调研：raw.githubusercontent + api.github.com + registry.npmjs.org）,,2026-10-07
+B002,核实宿主契约：分叉关系怎么表示 / 什么事件能观察到 fork / 标题怎么读怎么写,每条结论带 包名/文件:行号 且区分「已读源码」与「勘察记录」,docs/DESIGN.md,done,docs/DESIGN.md §1-§3（本人复核 session/created 声明与发射点、SessionHeader.parentSession、increasedForkTitle、SessionTitleService.get/rename、服务名、真机配置取值）,,2026-10-07
+B003,实现「分支联系」：分叉会话标题自动带上「⤷ 来源：<源标题>」,离线断言全绿 + 真机断言全绿；反例（普通会话 / 子智能体会话 / 别人改过名 / 窗口过期后的改名）都不被动手,lib/index.js;cordis.patch.yml,done,离线 13/13（npm test）+ 真机 14/14（npm run rm-test）；详见 .verify/REPORT.md,v0.1.0 working tree,2026-10-07
+B004,把插件装进 profile 并在 GUI 里目视确认侧栏行显示来源标签,侧栏行显示「⤷ 来源：…」且只闪变一次；给出回滚命令,（profile manifest 与 patch 层，非本仓库）,todo,,,

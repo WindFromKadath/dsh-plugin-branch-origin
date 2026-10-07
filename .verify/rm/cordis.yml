@@ -1,0 +1,48 @@
+# 真机测试用最小组合：会话 + 持久化 + 存储域 + 投影 + 标题 + 本插件。
+# 没有 webserver / agent-loop / 模型：不开端口、不调 LLM、跑完即退。
+#
+# 故意**不**挂 dsh-api-session-controller（它只在 web-app bundle 里）：
+# 本插件的主路径正是"没有 controller 也能标注"，所以这条组合比 desktop 更严苛。
+
+- id: timer
+  name: '@deepseek-ai/cordis-plugin-timer'
+
+- id: session
+  name: '@deepseek-ai/dsh-session'
+
+- id: session-persistence-jsonl
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js dshHomePath('sessions')
+
+- id: storage
+  name: '@deepseek-ai/dsh-storage'
+
+- id: storage-json
+  name: '@deepseek-ai/dsh-storage-json'
+  config:
+    root: !!js dshHomePath('storages')
+
+- id: storage-domain
+  name: '@deepseek-ai/dsh-storage-domain'
+  config:
+    backend: json
+
+- id: session-projection
+  name: '@deepseek-ai/dsh-session-projection'
+
+- id: session-query
+  name: '@deepseek-ai/dsh-session-query'
+
+- id: session-title
+  name: '@deepseek-ai/dsh-session-title'
+  config:
+    # 与 dsh-base 的真实取值一致（dsh-base/cordis.patch.yml:55-60）。
+    # maxTitleBytes 非零意味着：源标题很长时官方 rename 会截断，
+    # 因为截断保留头部，我们的「⤷ 来源：」前缀仍在最前面。
+    fallbackMaxWords: 5
+    fallbackMaxBytes: 40
+    maxTitleBytes: 80
+
+- id: branch-origin
+  name: dsh-plugin-branch-origin
