@@ -20,6 +20,8 @@ credentials.yaml
 .verify/*.yml
 .verify/*.txt
 .verify/*.png
+.verify/**/*.png
+.verify/font-check/
 .verify/home/
 .verify/proj/
 
