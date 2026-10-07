@@ -157,7 +157,44 @@ PASS  client.js 用包名逐字注册 / client.js 有全有或全无的保护
 
 这条预检的意义：客户端组合是**全有或全无**，一个包在激活期抛错会拖垮整个 GUI —— 静态预检先把"声明形态"这一类失败排掉。
 
-### 7.3 仍未做的
+### 7.3 GUI 真机（无头 Chrome + CDP）：**7/7 通过**
 
-- **真实浏览器里的目视/机检**（`tasks.csv` B006）：需要在 trial 或重启后的 desktop 上跑 CDP 驱动，断言 `[data-slot="sidebar.session.row.leading"]` 里出现徽标、悬停出现「来源」段、控制台无客户端组合错误。本机 Chrome 可用（`<chrome>`），驱动套路见 `dsh-plugin-branch\.verify\connected-nodes-drive.mjs`；本轮没有执行，因为需要另起一个 web 服务，而 desktop 正被本会话占用。
-- 因此 §7.1/§7.2 是**离线**证据；"徽标在真实 DOM 里长什么样"仍是未验证。
+装置是**仓库内自包含**的，全程不碰用户 `~/.dsh`、不动 desktop：
+
+| 文件 | 作用 |
+|---|---|
+| [gui/setup.mjs](gui/setup.mjs) | 建临时 `DSH_HOME`（`.verify/gui/home`）与临时 `gui` profile；只把用户真实的 `profiles/node_modules` 当**只读**锚点用来解析官方包 |
+| [gui/fixture/](gui/fixture/) | 一次性夹具插件：用官方 `sessionPersistence.create → append → flush → close` 落盘两个会话，子会话 header 带 `parentSession`，再挂进工作区注册表 |
+| [gui/drive.mjs](gui/drive.mjs) | 无头 Chrome + CDP：开页面、关引导弹窗、展开侧栏、断言行/徽标/悬停/控制台 |
+| [gui/probe-page.mjs](gui/probe-page.mjs) | 页面结构探针（定位"为什么没有行"时用） |
+
+运行：`node .verify/gui/setup.mjs` → 用临时 `DSH_HOME` 起 `--profile gui --port 0 --no-open` → `node .verify/gui/drive.mjs <CDP端口> <页面URL>`。
+
+结果（原始输出）：
+
+```
+PASS  A1 页面加载完成  {"state":"complete"}
+PASS  A2 侧栏出现会话行（夹具的源会话 + 分叉子会话）  {"rows":2}
+PASS  A3 分叉行的行首出现来源徽标
+      {"rowKey":"session:session-fixture-fork","badgeText":"⤷",
+       "badgeTitle":"来源：dsh-plugin-branch-origin","slotText":"⤷","rowText":"⤷ 未命名 1分钟"}
+PASS  A4 徽标 tooltip 是来源标注（`来源：<源对话标题>`）  {"titles":["来源：dsh-plugin-branch-origin"]}
+PASS  A5 没有父级的行不带徽标  {"rows":1}
+PASS  A6 悬停分叉行时出现「来源」段  {"hoverText":"来源 ⤷ dsh-plugin-branch-origin"}
+PASS  A7 控制台没有本插件/客户端组合的错误  {"ours":[],"totalErrors":0}
+
+结果：7/7 通过
+```
+
+三条最要紧的结论：
+
+1. **客户端组合在真实浏览器里加载成功、零错误** —— "全有或全无"会拖垮整个 GUI 的风险被实测排除（A7 + A1）。这是重启前最需要确认的一条。
+2. **徽标只出现在"有父级"的那一行**：分叉行 `session:session-fixture-fork` 有 `⤷`，源行 `session:session-fixture-source` 没有（A3/A5 成对反例）。
+3. **悬停段的文案确实渲染出来**：`来源 ⤷ dsh-plugin-branch-origin`（A6）。
+
+**一处诚实的折扣**：tooltip 里的来源名是 `dsh-plugin-branch-origin`（cwd 目录名），不是夹具写的 `源对话`。原因是夹具造的是**冷会话**，而客户端列表的标题只来自 projection cache，未 engage 的会话没有缓存 ⇒ 官方 `displayTitle` 退回 cwd 目录名（`dsh-plugin-branch` V23 记录过同一现象）。真实 GUI 里的 fork 子会话是 live 的、父会话本来就有投影标题，所以实际会显示真名。试过用 `sessionController.rename` 把夹具会话 resume 成 live 来消掉这个折扣，**实测反而弄坏夹具**（子会话从列表消失、源行变 blank），已回退并把这个坑记进 AGENTS §6。
+
+### 7.4 仍未做的
+
+- 只在**无头 Chrome + 临时 profile** 上验过；用户真实 `desktop` GUI 里的目视（重启后）仍是最后一步（`tasks.csv` B004）。
+- 与 `dsh-plugin-branch` 同装时的徽标并存未实测：本装置只装了本插件 + 夹具，所以 `drive.mjs` 的徽标选择器已按 `title^="来源："` 过滤（避免取到同槽里的「⇄」徽标），但"两个徽标同时在同一行"没有真机跑过。

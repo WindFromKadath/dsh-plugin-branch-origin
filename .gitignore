@@ -22,3 +22,8 @@ credentials.yaml
 .verify/*.png
 .verify/home/
 .verify/proj/
+
+# GUI 真机装置的临时产物：临时 DSH_HOME、无头 Chrome 的 user-data-dir 与日志
+.verify/gui/home/
+.verify/gui/chrome-*/
+.verify/gui/*.txt

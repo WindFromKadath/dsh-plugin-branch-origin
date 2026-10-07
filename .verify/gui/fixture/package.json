@@ -1,0 +1,16 @@
+{
+  "name": "branch-origin-gui-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "description": "一次性 GUI 验证夹具：起一个源会话 + 一个 store 级 fork 子会话，让侧栏里出现一行「有父级」的会话。不是发布物。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

@@ -13,7 +13,7 @@
 | 版本 | `0.1.1`，纯 JS、**零依赖**、无构建链、不注册任何工具；**两个半边**（宿主 + 客户端） |
 | 实现 | 宿主：[lib/index.js](lib/index.js)（约 210 行）+ [cordis.patch.yml](cordis.patch.yml) 一行。客户端：[lib/client.js](lib/client.js)（手写 classic script，只用基座的 `react` / `react/jsx-runtime`） |
 | 核心机制 | 宿主：挂 `session/created`（带 `{ global: true }`）识别 fork，等 600ms 后改标题；再挂 `session/event` 的 `session/title` 做收敛。客户端：在 `sidebar.session.row.leading` 与 `...row.hover` 上按官方列表行的父级字段渲染来源 |
-| 验证 | 离线 13/13 + 客户端冒烟（`npm test`）；真机 14/14（`npm run rm-test`）；客户端声明静态预检 14/14（`.verify/check-client-manifest.mjs`）；见 [.verify/REPORT.md](.verify/REPORT.md) |
+| 验证 | 离线 13/13 + 客户端冒烟（`npm test`）；真机 14/14（`npm run rm-test`）；客户端声明静态预检 14/14；**GUI 真机 7/7**（无头 Chrome + CDP，仓库内自包含装置）；见 [.verify/REPORT.md](.verify/REPORT.md) |
 | 已装载的 profile | **`desktop`（2026-10-07 装入，待用户重启生效）**。装载 [.verify/install-desktop.mjs](.verify/install-desktop.mjs)，宿主编排预检 [.verify/diagnose-desktop-compose.mjs](.verify/diagnose-desktop-compose.mjs) |
 | 定位 | 差异点是**入口覆盖**：同类插件只标注自己创建的分叉，本插件覆盖官方原生 fork。见 [docs/PRIOR-ART.md](docs/PRIOR-ART.md) |
 
@@ -92,6 +92,16 @@ node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
 node .verify/check-client-manifest.mjs
 #   期望：本仓库与 profile 里的安装副本各 7 项全 PASS
 
+# ── GUI 真机（无头 Chrome + CDP；仓库内自包含，不碰用户 ~/.dsh、不动 desktop）──
+node .verify/gui/setup.mjs                       # 建临时 DSH_HOME + 临时 gui profile（幂等）
+# 然后：把 DSH_HOME 指向 .verify/gui/home，起 `dsh --profile gui --port 0 --no-open`，记下打印的 URL
+# 再起无头 Chrome（**必须带这三个旗标**，见 §6）：
+#   chrome --headless --no-sandbox --disable-crash-reporter --disable-breakpad \
+#          --remote-debugging-port=9333 --user-data-dir=<工作区内的临时目录> about:blank
+node .verify/gui/drive.mjs 9333 '<带 token 的页面 URL>'
+#   期望：A1–A7 全 PASS（页面加载 / 有行 / 分叉行有徽标 / tooltip 是来源标注 / 源行无徽标 / 悬停有「来源」段 / 控制台零错误）
+node .verify/gui/probe-page.mjs 9333 '<URL>'      # 页面结构探针：排查"为什么没有行"时用
+
 # 排掉"junction 装载时模块加载失败"（另一个插件踩过）：直接按 profile 的路径 import
 #   node --input-type=module -e "const m = await import('file:///<profile>/node_modules/dsh-plugin-branch-origin/lib/index.js'); console.log(m.name)"
 
@@ -153,12 +163,25 @@ node .verify/check-client-manifest.mjs
 | 快照引用稳定性 | `useSyncExternalStore` 的选择器若每次返回**新对象/新数组**，会无限重渲染。返回**字符串**最省事（本项目就是）；返回数组要自己做 memo |
 | 徽标的可见性依赖列表快照 | 徽标读的是官方客户端列表的 `parentId`；**冷会话要等一次列表刷新才有行**（`dsh-plugin-branch` V23 已记录同一现象） |
 | 无法在运行中的桌面应用里验客户端半边 | 客户端"是不是客户端包"的判定被缓存到重启（`dsh-plugin-branch` A-39）⇒ 加/改客户端半边后必须**完全退出并重开**应用 |
+| 沙箱里 Chrome 起不了渲染进程 | DSH 沙箱禁止**命名管道**：crashpad 先报 `OpenProcess: 拒绝访问` → `crash server failed to launch, self-terminating`（Chrome 直接退出）；侥幸起来后 mojo 又报 `platform_channel.cc Check failed: 拒绝访问`，于是 **browser 级 CDP 命令正常、page 级 `Runtime.enable` 永久超时**（现象极具误导性）。对策：`--no-sandbox --disable-crash-reporter --disable-breakpad`，并且**渲染进程 IPC 需要一次性更宽权限** |
+| 判断"CDP 传输坏了"还是"页面目标没渲染进程" | 连 `/json/version` 的 **browser** 端点发 `Target.getTargets`：有回 ⇒ 传输没问题，是页面目标没有渲染进程（`.verify/gui/probe-cdp2.mjs` 就是这么判的） |
+| 侧栏行的行首槽只在 idle 行渲染 | `sidebar.session.row.leading` 在行 running 时会被官方状态点**顶掉**（【勘察记录】`dsh-client-ui-workspace/lib/client.js:1577,1623`）⇒ 徽标与 `dsh-plugin-branch` 的 `⇄N` 同受此限 |
+| 徽标选择器不能泛查 | 同一个 leading 槽里可能还有 `dsh-plugin-branch` 的「⇄」徽标（order 20 < 我们的 21，排在前面）⇒ 断言必须按 `title^="来源："` 过滤，别用 `span[title]` |
+| slot 锚点没有盒子 | `[data-slot=…]` 的样式是 `display: contents` ⇒ `getBoundingClientRect()` 恒为 0。悬停坐标要取**行**元素 `[data-row-key="session:<id>"]` |
+| 悬停卡有延迟 | 官方 `openDelayMs: 800`；且要发**两次** `mouseMoved`（第二次偏 +2/+1）才稳定触发 React enter，之后轮询读 `[data-slot="sidebar.session.row.hover"]` |
+| 官方列表只列**已持久化**的会话 | `sessionController.list()` 走 `sessionQuery.listSessions()`（`dsh-api-session-controller/lib/index.js:1888-1906`）⇒ 只 `sessions.create` 的内存会话**不会**出现在侧栏。夹具必须走 `sessionPersistence.create → append → flush → close` 落盘 |
+| 冷会话的标题显示不出来 | 客户端列表的标题只来自 projection cache；未 engage 的冷会话没有缓存 ⇒ 官方 `displayTitle` 退回 cwd 目录名（`dsh-plugin-branch` V23 记录过）。**真实 fork 的子会话是 live 的**，所以真实场景正常 |
+| 别用 `sessionController.rename` 去"预热"夹具会话 | 试过：它把会话 resume 成 live 好让标题进缓存，结果**弄坏夹具** —— 子会话从列表消失、源行变 blank（leading 槽整条不渲染）。已回退 |
+| 首屏引导弹窗 | 「添加一个 API Key」弹窗要等约 6 秒才渲染；不点掉「稍后配置」，侧栏就打不开，整轮断言全是 0 行 |
+| `job_kill` 不等于杀进程 | 它只停作业壳；实测残留 4 个 `dsh web` 服务进程，会**握着会话写句柄**，导致下一次夹具报 `SessionAlreadyOwnedError`。收尾要显式杀 node/chrome 进程 |
+| 别用 `$home` / `$pid` 当变量名 | PowerShell 里它们是只读自动变量（大小写不敏感），赋值静默失败，清理脚本会"看起来跑了但什么都没删" |
 
 ## 7. 交接检查清单
 
 - [ ] `npm test` 全绿（13 项 + 客户端冒烟）
 - [ ] 改过 `lib/`：`npm run rm-test` 全绿（14 项），并把结论写回 [.verify/REPORT.md](.verify/REPORT.md)
 - [ ] 改过 `lib/client.js` 或 `package.json` 的 `dsh.client` / `exports`：`npm run client-smoke` 与 `node .verify/check-client-manifest.mjs` 全绿
+- [ ] 改过客户端界面：跑一遍 `.verify/gui/` 那套 GUI 真机（A1–A7 全 PASS），并把结论写回 [.verify/REPORT.md](.verify/REPORT.md) §7.3
 - [ ] 改过 md：`node .verify/md-lint.mjs` 报"未发现结构问题"
 - [ ] 契约相关结论已写进 [docs/DESIGN.md](docs/DESIGN.md)（带 `包/文件:行号`）
 - [ ] 决策变化已记进 DESIGN.md §5，并同步 README 行为表

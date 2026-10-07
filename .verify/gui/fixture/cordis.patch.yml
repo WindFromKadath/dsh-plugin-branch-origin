@@ -1,0 +1,4 @@
+# 一次性 GUI 验证夹具的 patch 行（不是发布物）。
+- insert:
+    - id: branch-origin-gui-fixture
+      name: branch-origin-gui-fixture
