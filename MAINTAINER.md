@@ -83,15 +83,17 @@ pwsh -NoProfile -File .privacy-tools\Invoke-PrivacyCheck.ps1 -Repo . -Mode Stage
 
 ### 已执行「泄露后的处理与验证」（2026-10-07）
 
-- 定位：**已本地提交，未推送**（无远端、无标签、无 Fork/克隆）；泄露类别是**本机绝对路径**，不含凭据。
+- 定位（**处理当时**）：**已本地提交，未推送**（无远端、无标签、无 Fork/克隆）；泄露类别是**本机绝对路径**，不含凭据。
 - 处理：全量 `git bundle` 备份 → 受控副本里 `git filter-branch` 脱敏 → 删 `refs/original` + `gc --prune=now` → `git fetch` 回收到原仓库 → 旧提交从本地对象库清除。
-- 验证：新 HEAD 的 tree 与改写前**逐字节相同**；全部可达历史盘符路径 **0 处**；`npm test` 13/13、`npm run rm-test` 14/14、客户端声明预检 14/14 全通过；`git fsck` 无输出。
+- 本地验证：新 HEAD 的 tree 与改写前**逐字节相同**；全部可达历史盘符路径 **0 处**；`npm test` 13/13、`npm run rm-test` 14/14、客户端声明预检 14/14 全通过；`git fsck` 无输出。
+- **上传后核验**（2026-10-07 15:55，GitHub REST API + 未登录网页）：仓库为 **public**、默认分支 `main`，远端 HEAD 与本地 HEAD **一致**，远端 8 个提交**全部是改写后的编号**；改写前的旧 HEAD 在 GitHub 上 **API 422 / 网页 404**，远端无标签、无 Fork、无 Issue/PR。⇒ **本次泄露未公开**（推送发生在改写完成之后）。
 - 记录：[.privacy-tools/VERIFICATION.md](.privacy-tools/VERIFICATION.md)（只记类别与结论）；完整旧编号与原始备份留在工作区内的**受控位置**，不入库。
 
 **待核验 / 注意**：
 
 - 受控备份 bundle 含改写前的本机路径，**不得**进入任何仓库或公开位置。
-- 将来配置远端时，推送前重跑 `History`；**不要**从旧备份推送任何分支。
+- 本仓库历史已改写：**不要**从旧备份 bundle 推送任何分支。
+- 本机 `git` 无法直连 GitHub（受限令牌下 schannel 取不到 TLS 凭据），远端核验走 API；`git ls-remote` / `git fetch` 未执行，本地 `main` 也未设置上游。
 - 图片像素、PDF 正文、Office 备注、压缩包、LFS 实际对象不在自动检查范围内（本仓库当前无此类附件）。
 
 ## 给 Agent 的启动语
@@ -106,7 +108,7 @@ pwsh -NoProfile -File .privacy-tools\Invoke-PrivacyCheck.ps1 -Repo . -Mode Stage
 | 本文件 | 维护者：本轮目标、理解、决策、验收与公开前检查 |
 | [AGENTS.md](AGENTS.md) | Agent 接手与执行规则；任务状态仍由 `tasks.csv` 保存 |
 
-未提供 `CONTRIBUTING.md` / `CONTRIBUTING.zh-CN.md`：本项目当前未配置远端、没有外部贡献渠道，先不为空渠道建贡献指南；配置远端后按模板补齐并互链。
+未提供 `CONTRIBUTING.md` / `CONTRIBUTING.zh-CN.md`：模板列了这一项，但本轮范围由用户选定为「README 双语化 + 隐私检查 + MAINTAINER + LICENSE」，**不含贡献指南**，因此先不建。仓库已公开且 Issue / PR 可用，需要时按模板补齐两版并互链。
 
 - 公开入口回答读者怎样使用当前可获取的版本；本轮任务、作者疑点和内部检查过程保存在维护记录。
 - 两版公开文档使用相同的事实字段：运行命令、路径、配置键、版本、接口与许可标识保持一致，代码标识（含产品字符串 `⤷ 来源：`）不翻译。
@@ -118,6 +120,6 @@ pwsh -NoProfile -File .privacy-tools\Invoke-PrivacyCheck.ps1 -Repo . -Mode Stage
 2. 公开状态只写已核查的能力与适用边界：验证表里的检查均已实际执行，结果见 [.verify/REPORT.md](.verify/REPORT.md)。
 3. 链接目标：README 只链接仓库内存在的文件与他人公开项目；两版互链已在顶部。
 4. 许可：MIT，见 [LICENSE](LICENSE)（Copyright (c) 2026 WindFromKadath）；无捆绑第三方代码或素材。
-5. 按拟公开版本检查暂存内容、历史、身份信息、附件与链接目标：**未执行** —— 本项目未配置远端、未发布，见上方「隐私与发布」的待核验项。
+5. 按拟公开版本检查暂存内容、历史、身份信息、附件与链接目标：**已执行** —— 当前版本 `Index` 模式只剩工具自身 1 项误报；历史已按「泄露后的处理与验证」改写，并做了上传后核验，结果见 [.privacy-tools/VERIFICATION.md](.privacy-tools/VERIFICATION.md)。
 
-已核对的公开版本：README 双语版对应提交 `v0.1.2` 之后的工作树；双语核对：2026-10-07 由协作 Agent 完成（事实字段逐条对齐，命令与路径未翻译）；隐私与许可核对：`.privacy-tools/README.md` 记录了实际命令与结果，历史检查待重跑。
+已核对的公开版本：2026-10-07 15:55 经 GitHub API 核验，远端 `main` 与本地 HEAD **一致**（8 个提交，全部为改写后的编号）；双语核对：2026-10-07 由协作 Agent 完成（事实字段逐条对齐，命令与路径未翻译）；隐私与许可核对：`.privacy-tools/README.md` 记录实际命令与结果，`.privacy-tools/VERIFICATION.md` 记录历史改写与上传后核验。

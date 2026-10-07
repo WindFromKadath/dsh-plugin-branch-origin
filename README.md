@@ -121,8 +121,8 @@ Because this plugin **only labels and never takes over**, it can coexist with th
 
 | Item | Current state |
 |---|---|
-| How to get it | This repository is currently **maintained locally only** (no remote configured) and is installed into a DSH profile through a `link:` directory link; a clone URL will be added once published |
-| Feedback channel | No issue tracker is configured yet; problems and change proposals are recorded in the maintenance entry [MAINTAINER.md](MAINTAINER.md), and a public channel will be added after publication |
+| How to get it | Public repository: [WindFromKadath/dsh-plugin-branch-origin](https://github.com/WindFromKadath/dsh-plugin-branch-origin). Clone it, then install it into a DSH profile through a `link:` directory link (see “Install and enable”) |
+| Feedback channel | Reproducible problems and usage questions: [the issue tracker](https://github.com/WindFromKadath/dsh-plugin-branch-origin/issues). Change proposals: pull requests — see [MAINTAINER.md](MAINTAINER.md) for how changes are checked |
 | License | MIT, see [LICENSE](LICENSE) (Copyright (c) 2026 WindFromKadath) |
 | Third-party material | No bundled third-party code or assets; the README and `docs/PRIOR-ART.md` only link to other projects |
 | Maintenance availability | Personal project, maintained as needed; no response-time or version-support commitment |

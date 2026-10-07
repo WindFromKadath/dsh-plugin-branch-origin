@@ -119,8 +119,8 @@ node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整�
 
 | 项 | 现状 |
 |---|---|
-| 获取方式 | 本仓库当前**仅在本地维护**（未配置远端），通过 `link:` 目录链接装进 DSH profile；克隆地址待发布后补充 |
-| 反馈渠道 | 尚未配置 Issue 跟踪；问题与改动建议先记录在 [MAINTAINER.md](MAINTAINER.md) 的维护入口，发布后补充公开渠道 |
+| 获取方式 | 公开仓库：[WindFromKadath/dsh-plugin-branch-origin](https://github.com/WindFromKadath/dsh-plugin-branch-origin)；克隆后按「安装与启用」用 `link:` 目录链接装进 DSH profile |
+| 反馈渠道 | 可复现的问题与使用疑问走 [Issue](https://github.com/WindFromKadath/dsh-plugin-branch-origin/issues)；改动建议走 Pull Request —— 检查方式见 [MAINTAINER.md](MAINTAINER.md) |
 | 许可 | MIT，见 [LICENSE](LICENSE)（Copyright (c) 2026 WindFromKadath） |
 | 第三方材料 | 无捆绑的第三方代码或素材；`README` 与 `docs/PRIOR-ART.md` 只以链接方式引用他人项目 |
 | 维护可用性 | 个人项目，按需维护；不承诺响应时限与版本支持周期 |

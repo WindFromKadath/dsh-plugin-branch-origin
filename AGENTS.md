@@ -207,6 +207,9 @@ node .verify/gui/probe-color.mjs 9333 '<URL>'     # 计算样式探针：排查"
 
 ## 8. git 约定
 
-- 提交信息：`<类型>: <一句话>`，类型取 `feat` / `fix` / `docs` / `test` / `chore`。
+- 提交信息：`<类型>: <一句话>`，类型取 `feat` / `docs` / `fix` / `test` / `chore`。
 - 作者身份是仓库本地中性设置（`dev@localhost`），不写个人邮箱。
 - **永不提交**：`.verify/` 下的运行时产物（`*.jsonl`、`*.yml`、`*.txt`，以及 `home`、`proj` 子目录）、任何凭证、`node_modules/`。
+- **远端**：`origin` = `https://github.com/WindFromKadath/dsh-plugin-branch-origin.git`（**public**，默认分支 `main`）；本地 `main` 已跟踪 `origin/main`（2026-10-07 设置）。
+- **本机 `git` 连 GitHub 需要一次性更宽权限**：受限令牌下 schannel 取不到 TLS 凭据（`schannel: SEC_E_NO_CREDENTIALS`），`ls-remote` / `fetch` / `push` 全部失败；加宽后 `git ls-remote` 与 `git fetch` 实测可用。凭据由 `gh` 提供（`~/.gitconfig` 把 `gh auth git-credential` 配成 github.com 的助手，已登录 `WindFromKadath`，含 `repo` scope）。
+- **历史已于 2026-10-07 改写**（见 [.privacy-tools/VERIFICATION.md](.privacy-tools/VERIFICATION.md)）：**不要**从受控备份 bundle 推送任何分支；改写前的旧编号只留在那个 bundle 里。
