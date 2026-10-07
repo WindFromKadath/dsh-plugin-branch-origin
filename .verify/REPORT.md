@@ -3,7 +3,7 @@
 - 日期：2026-10-07
 - 代码版本：working tree（尚未提交；见 §5 待办）
 - 运行时：DSH 0.2.0-rc.2，Node v24.18.0（官方包取自本机全局 CLI 安装目录）
-- 结论：离线 **13/13**、真机 **14/14** 通过。**GUI 目视与 profile 装载未做**（见 §4）。
+- 结论：离线 **13/13**、真机 **14/14** 通过；`desktop` profile **已装入**且组合预检通过（§3）。**GUI 目视仍待重启后确认**（§5）。
 
 ## 1. 离线行为断言（`npm test`）
 
@@ -64,24 +64,63 @@
   {id: 第二个子会话, parent: 源会话} ]
 ```
 
-## 3. 本轮修正过的实现缺陷
+## 3. desktop profile 装载与组合预检
+
+按用户 2026-10-07 的明确要求装入 `desktop`。装载脚本 [install-desktop.mjs](install-desktop.mjs)（幂等、可 `--uninstall` 精准卸载，**不从备份整体还原**）。
+
+| 落点 | 结果 |
+|---|---|
+| `<profile>/package.json` → `dependencies` | `"dsh-plugin-branch-origin": "link:<repo>"`（`dshmarket` 原样保留） |
+| 同上 → `dsh.profile.bundles` | 追加 `dsh-plugin-branch-origin` |
+| `<profile>/node_modules/dsh-plugin-branch-origin` | 目录链接 → 本仓库 |
+| manifest 备份 | `package.json.bak-2026-10-07T04-39-41-853Z-dsh-plugin-branch-origin` |
+
+**组合预检**（只读，用 app-boot 自己的 `loadProfileDirectory` + `composeEntries` 复现 desktop 组合；见 [diagnose-desktop-compose.mjs](diagnose-desktop-compose.mjs)）：
+
+```
+bundle 层：8        被跳过的 bundle：0        组合后条目总数：196
+  + ... dshmarket
+  + dsh-plugin-branch-origin   (patch: <profile>\node_modules\dsh-plugin-branch-origin\cordis.patch.yml)
+我们那一行：[ { "id": "branch-origin", "name": "dsh-plugin-branch-origin" } ]
+结论：bundle 已解析 = true；被跳过 = false；组合含我们那一行 = true
+```
+
+**模块加载预检**（排掉 `dsh-plugin-workspace-archive` 踩过的"组合层正常、只有模块加载失败"）：
+
+```
+经 <profile>\node_modules\dsh-plugin-branch-origin\lib\index.js 加载成功
+name = dsh-plugin-branch-origin
+inject = ["sessions","sessionTitle"]
+```
+
+本插件零 import，因此不受"junction 装载解析不到宿主包"的限制——这正是这一层能一次通过的原因。
+
+**尚未生效**：组合是应用**启动时**固定的，实测 HMR 从不热装载插件行 ⇒ 必须完全退出并重开 DSH Desktop。本次装载时 GUI 正由该 profile 服务（监听 19387 的是应用自己的 Electron 进程），所以没有代用户重启。
+
+## 4. 本轮修正过的实现缺陷
 
 第一版 `splitCounter` 的正则把编号前的空格一起捕获成 base（`"X (1)"` → `"X "`），导致"子标题是否仍是源标题的机械派生形态"永远判否，fork 一次都不会被标注。离线用例当场抓住；修正为剥掉尾随空白，并把 `desiredTitle` 简化成"前缀子标题原文"的单一规则。
 
-## 4. 未覆盖 / 已知限制
+## 5. 未覆盖 / 已知限制
 
-- **GUI 目视未做**：真机装置是 headless 组合（无 webserver、无客户端半边，本插件也没有客户端半边）。"侧栏行显示新标题、只闪变一次"需要在 GUI 上确认。
-- **profile 装载未做**：本轮刻意没有改任何 profile（`desktop` 是正在使用的 GUI，装它要重启应用）。
+- **GUI 目视未做**：装载已完成、组合与模块加载均已预检，但侧栏那一行到底显示成什么样，要在重启后亲眼确认。真机装置是 headless 组合（无 webserver、无客户端半边，本插件也没有客户端半边），覆盖不到 GUI。
+- **重启会中断当时的会话**：监听 19387 的是桌面应用自己的进程，重启 = 本会话的服务器断开。这是没有代用户重启的唯一原因。
+- **清单重写风险**：2026-10-07 出现过"应用按自身状态重写 profile 清单，把本地 `link:` 依赖与 bundle 项一起丢掉"。实测应用**启动时**会重写 `cordis.yml`（mtime 与进程启动同秒），但**没有**在启动时重写 `package.json`。真被丢掉就重跑安装脚本（幂等）。
 - **磁盘物化未覆盖**：没有 agent loop 就没人给会话开写入句柄，store 里的会话不会落盘（`dsh-plugin-branch` V13 已记录同一事实）。因此地面真值改用官方 `sessionQuery` 的独立读取通道，而不是读会话文件。
 - **与同类插件并存未实测**：规则上互相放过（见 [docs/DESIGN.md](../docs/DESIGN.md) §5 D004），但没有与 autofork / session-tree 同机装载测试。
 
-## 5. 复现
+## 6. 复现
 
 ```powershell
 cd <repo>
 npm test        # 离线 13 项
 npm run rm-test # 真机 14 项
 node .verify/md-lint.mjs
+
+# 装载与组合预检
+node .verify/install-desktop.mjs --status
+node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
 ```
 
 真机装置全程只写仓库内的 `.verify/home` 与 `.verify/proj`，**不碰用户 `~/.dsh`**。
+只有 `install-desktop.mjs` 写 profile（工作区之外），需要一次性更宽权限。

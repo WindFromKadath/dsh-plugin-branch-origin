@@ -34,15 +34,28 @@ DSH 的 fork **已经**建立了真实父子链，也**已经**有一点可见�
 
 ## 安装与启用
 
-插件以 **junction + `package.json` 的 `link:`** 装进 profile（与工作区内另外两个插件同一套做法）：
+**已装进 `desktop` profile**（2026-10-07），形态与 `trial` 上已验证的 `dsh-plugin-branch` 一致：
 
-1. 在目标 profile 的 `package.json` 里加 `dependencies["dsh-plugin-branch-origin"] = "link:<本目录绝对路径>"`，并把包名追加进 `dsh.profile.bundles`；
-2. 在 `<profile>/node_modules/` 下建指向本目录的 junction；
-3. **重启 DSH**（实测 HMR 从不热装载插件行）。
+| 落点 | 内容 |
+|---|---|
+| `<profile>/package.json` → `dependencies` | `"dsh-plugin-branch-origin": "link:<本仓库>"`（插件页的「已安装」列表读这里） |
+| 同上 → `dsh.profile.bundles` | 追加包名（页面上的启用开关；组合时据此应用本 bundle 的 patch） |
+| `<profile>/node_modules/dsh-plugin-branch-origin` | 指向本仓库的目录链接 |
+
+装、查、卸是同一个脚本：
+
+```powershell
+node .verify/install-desktop.mjs --status      # 只看现状，不写任何东西
+node .verify/install-desktop.mjs              # 安装（幂等，可重复跑来修复）
+node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整体还原）
+```
+
+装完必须**完全退出并重开** DSH Desktop —— 实测 HMR 从不热装载插件行。重启后：侧栏对一个对话点「分叉会话」，新会话标题应变成 `⤷ 来源：<源会话标题>`。
+
+重启前想确认组合对不对：`node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs`（只读，用 app-boot 自己的组合函数复现 desktop profile，并报告我们那一行）。
 
 > ⚠️ 本插件**零 import**，所以不像有依赖的插件那样受"junction 装载解析不到宿主包"的限制。
-
-本轮**没有**改动任何 profile：`desktop` 是正在使用的 GUI，改动需重启应用。要装到 `desktop` 请先说明。
+> ⚠️ 2026-10-07 出现过"应用按自身状态重写 profile 清单，把本地 `link:` 依赖与 bundle 项一起丢掉"；真发生的话重跑上面的安装命令即可（脚本是幂等的）。
 
 ## 验证
 

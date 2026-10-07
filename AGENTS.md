@@ -14,7 +14,7 @@
 | 实现 | [lib/index.js](lib/index.js)（约 210 行，全部逻辑）+ [cordis.patch.yml](cordis.patch.yml)（一行 `insert`） |
 | 核心机制 | 挂 `session/created`（带 `{ global: true }`）识别 fork，等 600ms 后改标题；再挂 `session/event` 的 `session/title` 做收敛 |
 | 验证 | 离线 13/13（`npm test`）；真机 14/14（`npm run rm-test`）；见 [.verify/REPORT.md](.verify/REPORT.md) |
-| 已装载的 profile | **无**。本轮刻意没有改任何 profile（`desktop` 是正在使用的 GUI，装它要重启应用） |
+| 已装载的 profile | **`desktop`（2026-10-07 装入，待用户重启生效）**。装载脚本 [.verify/install-desktop.mjs](.verify/install-desktop.mjs)，组合预检 [.verify/diagnose-desktop-compose.mjs](.verify/diagnose-desktop-compose.mjs) |
 | 定位 | 差异点是**入口覆盖**：同类插件只标注自己创建的分叉，本插件覆盖官方原生 fork。见 [docs/PRIOR-ART.md](docs/PRIOR-ART.md) |
 
 **文档地图**
@@ -29,7 +29,7 @@
 
 ## 2. 硬性纪律
 
-1. **不要动 `desktop` profile**，除非用户明确要求。它是用户正在使用的 GUI；本插件目前**没有**装进任何 profile。确需装载：先备份 manifest，改完立刻给出回滚命令。
+1. **不要动 `desktop` profile**，除非用户明确要求。它承载着正在使用的 GUI：改动**必须重启应用**才生效，而重启会中断当前会话。2026-10-07 用户明确要求装入 `desktop`，因此有了 [.verify/install-desktop.mjs](.verify/install-desktop.mjs)；此后的改动仍需先问。
 2. **状态只有四档**：✅ 已实测（有证据）/ 🟡 契约已核实未实测 / ⏳ 未验证 / ❌ 已证伪。不许把"契约已核实"说成"已实测"。
 3. **不要为了过测试而放宽判定规则**。判定规则（[DESIGN.md](DESIGN.md) §4）是产品语义，改动要有理由并同步改测试与文档。
 4. **不要引入依赖或构建链**。零 import 是本插件的**硬约束**：profile 里的 `node_modules/<插件>` 是 junction 时，Node 按真实路径解析，插件 import 宿主包会 `ERR_MODULE_NOT_FOUND`。
@@ -46,16 +46,19 @@ DSH_HOME        默认 %USERPROFILE%\.dsh；profiles: desktop / trial / branch-e
                 （本机 <npm-global> = <npm-global>）
 本仓库          <repo> = <repo>
 运行时版本      DSH 0.2.0-rc.2（Node v24.18.0）
-desktop 应用    <app-dir>\resources\app.asar  ← 本机当前**不存在**该路径，
-                需要桌面侧源码时改用上面的全局 CLI 安装目录（同版本）
+desktop 应用    <app-dir>\resources\app.asar（**注意目录名里有一个空格**；
+                里面是打包文件，普通 Node 读不到内部路径 ⇒ 组合预检改用同版本的全局 CLI 作锚点）
+desktop profile %USERPROFILE%\.dsh\profiles\desktop（GUI 正由该 profile 服务，改它要重启应用）
 ```
 
 | 事实 | 说明 |
 |---|---|
 | 官方源码就在本机 | 全部契约都能直接读，不必联网、不必解 asar。`dsh-base/cordis.patch.yml` 还给出各行的真实配置取值 |
-| 沙箱 | 读工作区外只读；本插件的真机装置把 `DSH_HOME` 指向仓库内，**不需要**放宽权限 |
+| 沙箱 | 读工作区外只读；本插件的真机装置把 `DSH_HOME` 指向仓库内，**不需要**放宽权限。只有**写 profile** 需要一次性更宽权限 |
+| 写 profile 的窗口 | 与应用重写清单存在竞态：应用在**启动时**会重写 `cordis.yml`（实测 mtime 与进程启动同秒），但**没有**在启动时重写 `package.json` |
 | 真机验证不需要模型 | `.verify/rm/cordis.yml` 不挂 agent-loop / webserver：不开端口、不调 LLM、跑完即退 |
 | 沙箱内的测试运行器 | `node --test` 默认以管道 stdio 起子进程，在 DSH 文件沙箱下会 `EPERM` ⇒ 用 `--test-isolation=none`（`npm test` 已带） |
+| GUI 的进程归属 | 监听 19387 的是桌面应用自己的 Electron 进程 ⇒ **重启应用 = 本会话的服务器断开**，重启前先收尾 |
 
 ## 4. 常用命令
 
@@ -72,6 +75,18 @@ npm run check
 # 文档结构 lint（表格列数、围栏、标签块并段；改过 md 就跑）
 node .verify/md-lint.mjs
 node .verify/md-lint.mjs README.md docs/DESIGN.md      # 只查指定文件
+
+# profile 装载（写工作区外 ⇒ 需要一次性更宽权限）
+node .verify/install-desktop.mjs --status     # 只读：依赖声明 / bundle 启用 / 目录链接
+node .verify/install-desktop.mjs              # 安装（幂等，可重复跑来修复）
+node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整体还原）
+
+# 重启前的组合预检（只读；用 app-boot 自己的组合函数复现 desktop profile）
+node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
+#   期望：8 层全加载、0 跳过、组合条目含 { id: 'branch-origin', name: 'dsh-plugin-branch-origin' }
+
+# 排掉"junction 装载时模块加载失败"（另一个插件踩过）：直接按 profile 的路径 import
+#   node --input-type=module -e "const m = await import('file:///<profile>/node_modules/dsh-plugin-branch-origin/lib/index.js'); console.log(m.name)"
 
 # 读官方源码（只读）
 #   grep/read <npm-global>\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\<包>\...
