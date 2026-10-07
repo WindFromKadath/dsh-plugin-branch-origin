@@ -28,6 +28,7 @@
 | [tasks.csv](tasks.csv) | 任务与验收 | 每轮工作 |
 | [.verify/REPORT.md](.verify/REPORT.md) | 真机验证报告与证据 | 每次做真机验证后 |
 | [.privacy-tools/README.md](.privacy-tools/README.md) | 提交前隐私检查怎么跑、查什么、实测结果与已知误报 | 检查模块或结果变化时 |
+| [.privacy-tools/VERIFICATION.md](.privacy-tools/VERIFICATION.md) | 「泄露后的处理与验证」记录：处理类别、核验结论与残留误报（完整旧编号不入库） | 每次处理历史或隐私事件后 |
 
 ## 2. 硬性纪律
 
@@ -187,6 +188,10 @@ node .verify/gui/probe-color.mjs 9333 '<URL>'     # 计算样式探针：排查"
 | 别用 `$home` / `$pid` 当变量名 | PowerShell 里它们是只读自动变量（大小写不敏感），赋值静默失败，清理脚本会"看起来跑了但什么都没删" |
 | **悬停卡里的文字颜色不能走主题 token** | 悬停卡是**深色菜单材质，官方 CSS module 把文字颜色写死**：`.hoverTitle{color:#fff}` / `.hoverTime{color:#cfd3d6}` / `.hoverStatus{color:#adb2b8}`（`dsh-client-ui-workspace` 的 `Rows.module.css`；`SessionHoverContent` 在 `lib/client.js:1459-1483`）。在那个作用域里 `--dsw-alias-label-primary` 会解析成**浅色主题的近黑值 `#0f1115`**，与卡片背景 `#2c2c2e` 同色 ⇒ **字隐形**（v0.1.1 的真实缺陷，用户 2026-10-07 报的"字色有问题"）。卡片内用卡片自己的固定色；卡片外（行内徽标）才用主题 token |
 | 客户端界面的验证必须查计算样式 | 只断言 `innerText` **发现不了"字和背景同色"** —— v0.1.1 的 7/7 全绿却漏了这个缺陷。`.verify/gui/drive.mjs` 的 A7/A8 就是为此加的：A7 要求字色与官方卡片逐字一致，A8 要求字色 ≠ 卡片实际底色（底色要往上找第一个**不透明**祖先，`[data-menu-material]` 本身可能是透明的） |
+| **沙箱里 `git filter-branch` / 本地 `git fetch` 也会失败** | 两者都要 spawn 子进程（`sh` / `git-upload-pack`）并通过**管道**通信，DSH 受限沙箱禁止命名管道 ⇒ `filter-branch` 报 `sh.exe: *** fatal error - couldn't create signal pipe, Win32 error 5`，本地 `git fetch` 报 `Please make sure you have the correct access rights and the repository exists`（即使路径正确）。对策：这类命令用**一次性更宽权限**跑；`git fetch` 的本地路径要写成 `file:///` + 正斜杠绝对路径，不能直接给 Windows 路径 |
+| 隐私脚本的两处自伤 | `Index`/`History` 会把 `.privacy-tools/Invoke-PrivacyCheck.ps1` **自身**报为 `absolute-or-user-path`（UNC 分支匹配到自己的字面量）；它的「用户主目录」分支还会命中任何以斜杠包住 `home` 的文本段（本项目文档里的临时目录名 `.verify/home`）。两者都不是隐私问题，见 [.privacy-tools/README.md](.privacy-tools/README.md) |
+| 写文档时别踩「用户主目录」分支 | 提到临时目录名时**不要**在 `home` 后面带尾斜杠，否则当前版本也会被隐私检查计入（AGENTS §8 曾因此命中） |
+| 改写历史后必须比对 tree | `git filter-branch` 会换掉所有提交号。用「新 HEAD 的 tree == 改写前 HEAD 的 tree」证明内容零变化；再 `git grep -E '\b[A-Z]:[\\/]' $(git rev-list --all)` 证明历史里没有残留盘符路径 |
 
 ## 7. 交接检查清单
 

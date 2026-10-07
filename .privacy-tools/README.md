@@ -47,17 +47,18 @@ pwsh -NoProfile -File .privacy-tools\Invoke-PrivacyCheck.ps1 -Repo . -Mode Stage
 
 | 模式 | 结果 | 说明 |
 |---|---|---|
-| `Staged`（日常） | 首次提交本工具文件时 1 项；此后应为 0 | 提交前逐次跑，只覆盖本次暂存内容；工具文件提交后不再进入暂存集 |
+| `Staged`（日常） | **0 阻断项** | 提交前逐次跑，只覆盖本次暂存内容 |
 | `Index`（全快照） | **1 阻断项** | 只剩工具自身，见下方已知误报 |
-| `History`（全部历史） | **13 阻断项** | 全部来自**历史版本**里已删除的本机绝对路径；当前版本已清零（修复前 Index 为 9 项），历史需按模块流程处理 |
+| `History`（全部历史） | **6 阻断项** | 历史已按「泄露后的处理与验证」流程改写（2026-10-07）：本机绝对路径 **0 处**；剩余 6 项是工具的两类误报（自身 1 项 + 历史文档里的临时目录名命中「用户主目录」分支 5 项）。处理与验证记录见 [VERIFICATION.md](VERIFICATION.md) |
 
-修复内容：把文档与脚本里的本机绝对路径换成占位符或环境变量推导（`AGENTS.md` §3、`docs/DESIGN.md` §0、`.verify/diagnose-desktop-compose.mjs`、`.verify/gui/drive.mjs`）。旧提交里的路径仍在历史中，若将来要公开发布，按模块的「泄露后的处理与验证」流程处理，**不要**只改当前文件就当作历史已清理。
+修复内容：把文档与脚本里的本机绝对路径换成占位符或环境变量推导（`AGENTS.md` §3、`docs/DESIGN.md` §0、`.verify/diagnose-desktop-compose.mjs`、`.verify/gui/drive.mjs`）。随后按模块流程**改写全部本地历史**（受控副本 + `git filter-branch`，改写前做了全量 bundle 备份），旧提交已从本地对象库清除。
 
-### 已知误报：脚本会把自己标红
+### 已知误报：工具的两处自伤
 
-`Index` / `History` 模式会把 `.privacy-tools/Invoke-PrivacyCheck.ps1` 本身报为 `absolute-or-user-path`（第 109 行）。原因是该行的 UNC 检测分支（形如"两条反斜杠 + 非空白 + 反斜杠 + 非空白"）匹配到了**它自己那条正则里的字面量**。已实测确认：把第 109 行单独取出、用同一正则去匹配，命中的正是它自己的后半段（含 `home` 与 `Users` 两个备选分支）。
+1. **脚本把自己标红**：`Index` / `History` 会把 `.privacy-tools/Invoke-PrivacyCheck.ps1` 本身报为 `absolute-or-user-path`（第 109 行）。原因是该行的 UNC 检测分支（形如"两条反斜杠 + 非空白 + 反斜杠 + 非空白"）匹配到了**它自己那条正则里的字面量**。已实测确认：把第 109 行单独取出、用同一正则去匹配，命中的正是它自己的后半段。
+2. **`home` 作为路径段被误判**：「用户主目录」分支会命中任何以斜杠包住 `home` 的文本段。本项目文档里的临时目录名 `.verify/home` 因此被报为私人路径（历史版本 5 处）——那不是用户主目录，是本项目一次性验证装置的临时 `DSH_HOME`。
 
-这是**上游模块**的问题（复制件保持原样、未改动），影响是：只要脚本被纳入扫描范围，`Index` / `History` 就永远至少 1 个阻断项。规避方式：
+这是**上游模块**的问题（复制件保持原样、未改动），影响是：只要脚本被纳入扫描范围，`Index` / `History` 就无法归零。规避方式：
 
 - 日常用 `Staged`（默认只扫暂存内容，脚本提交后不再被扫）；
 - 需要干净的全量扫描时，**从模块目录**运行（脚本不在被扫仓库里），即 `pwsh -NoProfile -File <模块目录>\tools\Invoke-PrivacyCheck.ps1 -Repo . -Mode History`。

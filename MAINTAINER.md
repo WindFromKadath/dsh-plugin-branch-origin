@@ -75,15 +75,24 @@
 pwsh -NoProfile -File .privacy-tools\Invoke-PrivacyCheck.ps1 -Repo . -Mode Staged -Policy .privacy-tools\privacy-policy.json
 ```
 
-| 模式 | 2026-10-07 实测结果 |
+| 模式 | 2026-10-07 实测结果（历史改写后） |
 |---|---|
-| `Staged`（日常） | **1 阻断项** —— 仅因本次首次提交该工具文件本身；它提交后不再进入暂存集，日常应为 0 |
-| `Index`（全快照） | **1 阻断项** —— `.privacy-tools/Invoke-PrivacyCheck.ps1:109`，是**工具自身的已知误报**（它的 UNC 分支匹配到自己的字面量），非本项目内容问题 |
-| `History`（全部历史） | **13 阻断项** —— 全部来自**历史版本**里已删除的本机绝对路径；当前版本的同类问题已清零（修复前 Index 为 9 项） |
+| `Staged`（日常） | **0 阻断项** |
+| `Index`（全快照） | **1 阻断项** —— 只剩 `.privacy-tools/Invoke-PrivacyCheck.ps1` 自身，是工具已知误报 |
+| `History`（全部历史） | **6 阻断项** —— 本机绝对路径已 **0 处**；6 项全是工具的两类误报（自身 1 项 + 历史文档里 `home` 路径段命中「用户主目录」分支 5 项） |
 
-已做的修复：把当前版本里的本机绝对路径换成占位符或环境变量推导（[AGENTS.md](AGENTS.md) §3、[docs/DESIGN.md](docs/DESIGN.md)、`.verify/diagnose-desktop-compose.mjs`、`.verify/gui/drive.mjs`）。
+### 已执行「泄露后的处理与验证」（2026-10-07）
 
-**待核验**：历史提交里的旧路径仍在 Git 历史中。本项目当前**未配置远端**，未推送、未发布；将来要公开时须按模块的「泄露后的处理与验证」流程处理历史，不能只改当前文件。图片/PDF/Office 备注/压缩包/LFS 等内容不在自动检查范围内。
+- 定位：**已本地提交，未推送**（无远端、无标签、无 Fork/克隆）；泄露类别是**本机绝对路径**，不含凭据。
+- 处理：全量 `git bundle` 备份 → 受控副本里 `git filter-branch` 脱敏 → 删 `refs/original` + `gc --prune=now` → `git fetch` 回收到原仓库 → 旧提交从本地对象库清除。
+- 验证：新 HEAD 的 tree 与改写前**逐字节相同**；全部可达历史盘符路径 **0 处**；`npm test` 13/13、`npm run rm-test` 14/14、客户端声明预检 14/14 全通过；`git fsck` 无输出。
+- 记录：[.privacy-tools/VERIFICATION.md](.privacy-tools/VERIFICATION.md)（只记类别与结论）；完整旧编号与原始备份留在工作区内的**受控位置**，不入库。
+
+**待核验 / 注意**：
+
+- 受控备份 bundle 含改写前的本机路径，**不得**进入任何仓库或公开位置。
+- 将来配置远端时，推送前重跑 `History`；**不要**从旧备份推送任何分支。
+- 图片像素、PDF 正文、Office 备注、压缩包、LFS 实际对象不在自动检查范围内（本仓库当前无此类附件）。
 
 ## 给 Agent 的启动语
 
