@@ -1,8 +1,15 @@
 # dsh-plugin-branch-origin · 分支联系（DSH 插件）
 
-> 给**分叉出来的会话**标上来源：它的标题会变成 `⤷ 来源：<源会话标题>`，于是侧栏那一行自己就说明了「我是从哪个对话分出来的」。
+> 给**分叉出来的会话**标上来源，让「我是从哪个对话分出来的」这件事在侧栏上直接可见。
 
-零依赖、纯宿主半边、无构建链：整个插件就是 [lib/index.js](lib/index.js) 加 [cordis.patch.yml](cordis.patch.yml) 一行。
+**两条通道，互为补充**：
+
+| 通道 | 形态 | 改名后 |
+|---|---|---|
+| 宿主半边（标题） | 子会话标题变成 `⤷ 来源：<源会话标题>` | **丢失** —— 标签是标题字符串的一部分 |
+| 客户端半边（侧栏徽标） | 行首一个 `⤷`（悬停显示源标题） | **仍在** —— 它从会话的父级字段读，不碰标题 |
+
+零依赖、无构建链。宿主半边是 [lib/index.js](lib/index.js) + [cordis.patch.yml](cordis.patch.yml) 一行；客户端半边是手写的 [lib/client.js](lib/client.js)（只用官方基座的 `react` / `react/jsx-runtime`）。
 
 ## 为什么需要它
 
@@ -14,7 +21,7 @@ DSH 的 fork **已经**建立了真实父子链，也**已经**有一点可见�
 | 官方 fork 把子标题改成 `<源标题> (1)`（`increasedForkTitle`） | 只是个编号，看不出这是别人的分叉 |
 | 侧栏按 `SessionListEntry.depth` 做谱系缩进 | 缩进不说明来源对话叫什么 |
 
-本插件补的就是右上那一格：把子会话标题改写成 `⤷ 来源：<源标题>`，让来源**在标题里自述**。
+本插件补的就是右上那一格，并且补**两遍**：把子会话标题改写成 `⤷ 来源：<源标题>`（来源在标题里自述），再在侧栏行上加一个不依赖标题的来源徽标（改名也抹不掉）。
 
 ## 行为
 
@@ -31,6 +38,18 @@ DSH 的 fork **已经**建立了真实父子链，也**已经**有一点可见�
 | 源会话当时没有标题 | 不动 |
 
 判定细节：只有当子标题**抹掉官方尾编号后与源标题同名**时才算「仍是继承形态」，这时才贴标记。见 [docs/DESIGN.md](docs/DESIGN.md)。
+
+### 侧栏徽标（客户端半边）
+
+只读，不接管官方行：
+
+| 情形 | 结果 |
+|---|---|
+| 行的父级字段非空、且不是子智能体会话 | 行首出现 `⤷`，鼠标悬停该行时有「来源」段显示源对话标题 |
+| 你把这条会话**改名**了 | 徽标**照旧显示**（它不依赖标题），而标题里的 `⤷ 来源：…` 会随改名消失 |
+| 源对话被改名 | 徽标跟着显示**新**名字（实时读列表）；标题里的那份是 fork 时的快照，不会变 |
+| 源对话不在当前列表快照里 | 显示 `（未命名对话）`，不崩 |
+| 普通会话 / 子智能体会话 / 子代理分支 | 不显示徽标 |
 
 ## 安装与启用
 
@@ -50,9 +69,12 @@ node .verify/install-desktop.mjs              # 安装（幂等，可重复跑�
 node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整体还原）
 ```
 
-装完必须**完全退出并重开** DSH Desktop —— 实测 HMR 从不热装载插件行。重启后：侧栏对一个对话点「分叉会话」，新会话标题应变成 `⤷ 来源：<源会话标题>`。
+装完必须**完全退出并重开** DSH Desktop —— 实测 HMR 从不热装载插件行，客户端半边的装载判定也会被缓存到重启。重启后：
 
-重启前想确认组合对不对：`node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs`（只读，用 app-boot 自己的组合函数复现 desktop profile，并报告我们那一行）。
+1. 侧栏对一个对话点「分叉会话」→ 新会话标题变成 `⤷ 来源：<源会话标题>`，行首出现 `⤷` 徽标；
+2. 把这条分叉会话**改名** → 标题里的来源没了，但行首 `⤷` **还在**，悬停仍显示源对话名。
+
+重启前想确认组合对不对：`node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs`（只读，复现宿主编排）与 `node .verify/check-client-manifest.mjs`（只读，按 `dsh-client-modules` 的规则预检客户端半边声明）。
 
 > ⚠️ 本插件**零 import**，所以不像有依赖的插件那样受"junction 装载解析不到宿主包"的限制。
 > ⚠️ 2026-10-07 出现过"应用按自身状态重写 profile 清单，把本地 `link:` 依赖与 bundle 项一起丢掉"；真发生的话重跑上面的安装命令即可（脚本是幂等的）。
@@ -61,19 +83,25 @@ node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整�
 
 | 用途 | 命令 |
 |---|---|
-| 离线行为断言（13 项，桩 ctx，不需要任何依赖） | `npm test` |
+| 离线：宿主行为断言（13 项，桩 ctx）+ 客户端半边冒烟 | `npm test` |
+| 离线：只跑客户端半边冒烟（协议 / 两个席位 / 来源判据 / 降级 / 异常保护） | `npm run client-smoke` |
 | 真机端到端（14 项，真 Loader / 真 SessionStore / 真 session-title / 真 session-query） | `npm run rm-test` |
+| 预检：按 `dsh-client-modules` 的规则核对 `dsh.client` 声明 | `node .verify/check-client-manifest.mjs` |
+| 预检：复现 desktop profile 的宿主编排 | `node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs` |
 | 文档结构 lint | `node .verify/md-lint.mjs` |
 
 真机装置在仓库内的临时 `DSH_HOME`（`.verify/home`）里启动真 DSH 运行时，**不碰用户 `~/.dsh`**、不开端口、不调模型。证据与结论见 [.verify/REPORT.md](.verify/REPORT.md)。
 
 ## 已知限制
 
+- **标题里的来源挡不住改名**：这是"标签写在标题里"的固有代价。**侧栏徽标挡得住**（D009）；想要两者都有，现在是默认。
+- **标题里的是快照**：它记的是 fork 那一刻源对话的标题；改**源**对话的名字不会让旧标题跟着变。徽标显示的是**实时**名字。
 - **只标注新 fork**：插件装载**之前**就存在的旧分叉不会补标（不做启动扫描）。
 - **标注窗口**：fork 之后约 4.6 秒内（`settleMs 600` + `graceMs 4000`）会持续收敛标题；此窗口内用户手动改名**不会**被覆盖（改名后标题不再是继承形态），但若有人把标题改成恰好等于 `<源标题> (N)` 则可能被贴上标记。
 - **标题会被钉住**：走的是 `sessionTitle.rename()`，即 `source: { kind: 'user' }`。对 fork 子会话无副作用 —— first-prompt 标题提供方本来就跳过带父级的会话；但请勿把本插件用于给**非 fork** 会话命名。
 - **`maxTitleBytes` 会截断**：DSH 默认 80 字节，源标题很长时官方 `rename` 会截断尾部；截断保留头部，所以 `⤷ 来源：` 前缀仍在。
-- **不做**：不创建分叉、不搬子 agent、不画树、不改 parent pointer、不写 sidecar、不注册任何模型可见工具。
+- **客户端半边未在浏览器里目视确认**：协议与席位注册有离线冒烟 + 官方规则的静态预检，但"徽标在真实 DOM 里长什么样"要在重启后看（见 [.verify/REPORT.md](.verify/REPORT.md) §7）。
+- **不做**：不创建分叉、不搬子 agent、不画树、不改 parent pointer、不写 sidecar、不注册任何模型可见工具、不占 `single` 占位、不覆盖官方行。
 
 ## 与同类插件的关系
 

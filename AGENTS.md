@@ -10,11 +10,11 @@
 
 | 项 | 状态 |
 |---|---|
-| 版本 | `0.1.0`，纯 JS、**零依赖**、无构建链、无客户端半边、不注册任何工具 |
-| 实现 | [lib/index.js](lib/index.js)（约 210 行，全部逻辑）+ [cordis.patch.yml](cordis.patch.yml)（一行 `insert`） |
-| 核心机制 | 挂 `session/created`（带 `{ global: true }`）识别 fork，等 600ms 后改标题；再挂 `session/event` 的 `session/title` 做收敛 |
-| 验证 | 离线 13/13（`npm test`）；真机 14/14（`npm run rm-test`）；见 [.verify/REPORT.md](.verify/REPORT.md) |
-| 已装载的 profile | **`desktop`（2026-10-07 装入，待用户重启生效）**。装载脚本 [.verify/install-desktop.mjs](.verify/install-desktop.mjs)，组合预检 [.verify/diagnose-desktop-compose.mjs](.verify/diagnose-desktop-compose.mjs) |
+| 版本 | `0.1.1`，纯 JS、**零依赖**、无构建链、不注册任何工具；**两个半边**（宿主 + 客户端） |
+| 实现 | 宿主：[lib/index.js](lib/index.js)（约 210 行）+ [cordis.patch.yml](cordis.patch.yml) 一行。客户端：[lib/client.js](lib/client.js)（手写 classic script，只用基座的 `react` / `react/jsx-runtime`） |
+| 核心机制 | 宿主：挂 `session/created`（带 `{ global: true }`）识别 fork，等 600ms 后改标题；再挂 `session/event` 的 `session/title` 做收敛。客户端：在 `sidebar.session.row.leading` 与 `...row.hover` 上按官方列表行的父级字段渲染来源 |
+| 验证 | 离线 13/13 + 客户端冒烟（`npm test`）；真机 14/14（`npm run rm-test`）；客户端声明静态预检 14/14（`.verify/check-client-manifest.mjs`）；见 [.verify/REPORT.md](.verify/REPORT.md) |
+| 已装载的 profile | **`desktop`（2026-10-07 装入，待用户重启生效）**。装载 [.verify/install-desktop.mjs](.verify/install-desktop.mjs)，宿主编排预检 [.verify/diagnose-desktop-compose.mjs](.verify/diagnose-desktop-compose.mjs) |
 | 定位 | 差异点是**入口覆盖**：同类插件只标注自己创建的分叉，本插件覆盖官方原生 fork。见 [docs/PRIOR-ART.md](docs/PRIOR-ART.md) |
 
 **文档地图**
@@ -22,7 +22,7 @@
 | 文档 | 回答什么 | 什么时候改 |
 |---|---|---|
 | [README.md](README.md) | 用户视角：用途、行为表、安装、限制 | 行为/安装/限制变化时 |
-| [docs/DESIGN.md](docs/DESIGN.md) | 宿主契约（逐条带 `包/文件:行号`）+ 判定规则 + 决策记录 D001–D008 | 契约核实结果、判定规则、决策变化时 |
+| [docs/DESIGN.md](docs/DESIGN.md) | 宿主契约（逐条带 `包/文件:行号`）+ 判定规则 + 决策记录 D001–D010 | 契约核实结果、判定规则、决策变化时 |
 | [docs/PRIOR-ART.md](docs/PRIOR-ART.md) | 先行者核查（外部资料，非契约依据） | 再做生态调研时 |
 | [tasks.csv](tasks.csv) | 任务与验收 | 每轮工作 |
 | [.verify/REPORT.md](.verify/REPORT.md) | 真机验证报告与证据 | 每次做真机验证后 |
@@ -34,7 +34,7 @@
 3. **不要为了过测试而放宽判定规则**。判定规则（[DESIGN.md](DESIGN.md) §4）是产品语义，改动要有理由并同步改测试与文档。
 4. **不要引入依赖或构建链**。零 import 是本插件的**硬约束**：profile 里的 `node_modules/<插件>` 是 junction 时，Node 按真实路径解析，插件 import 宿主包会 `ERR_MODULE_NOT_FOUND`。
 5. **不要注册模型可见工具**。本插件的定位是"只标注、不接管"；"让 agent 自述来源"已由 [dsh-plugin-branch](../../dsh-plugin-branch/README.md) 的 `branch_where` 覆盖。
-6. **不要 fork 官方 UI**：本插件没有也不应有客户端半边。
+6. **客户端半边是"全有或全无"**：一个客户端包在激活期抛错，会让**整个 GUI 客户端**起不来。所以 `lib/client.js` 的 `apply` 外层**必须**保留 try/catch，且改动后必须跑 `npm run client-smoke` 与 `node .verify/check-client-manifest.mjs`。**不要**在客户端半边写任何写操作（它只读官方列表快照）。
 7. **`.verify/*.jsonl|*.yml|*.txt` 不入库**（已被 `.gitignore` 覆盖，别用 `-f` 强加）；文档里不写用户名，用 `$env:DSH_HOME` / `<repo>` 占位。
 8. **不删、不改名、不移动任何真实工作区目录**；真机验证一律用仓库内的临时 `DSH_HOME`。
 
@@ -63,8 +63,11 @@ desktop profile %USERPROFILE%\.dsh\profiles\desktop（GUI 正由该 profile 服�
 ## 4. 常用命令
 
 ```powershell
-# 离线行为断言（13 项；桩 ctx，零依赖，不需要 --import 钩子）
+# 离线行为断言（13 项）+ 客户端半边冒烟；桩 ctx，零依赖，不需要 --import 钩子
 npm test
+
+# 只跑客户端半边冒烟
+npm run client-smoke
 
 # 真机端到端（14 项；真 Loader / 真 SessionStore / 真 sessionTitle / 真 sessionQuery）
 npm run rm-test
@@ -85,6 +88,10 @@ node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整�
 node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
 #   期望：8 层全加载、0 跳过、组合条目含 { id: 'branch-origin', name: 'dsh-plugin-branch-origin' }
 
+# 客户端半边的静态预检（只读；复刻 dsh-client-modules 的校验与判定顺序）
+node .verify/check-client-manifest.mjs
+#   期望：本仓库与 profile 里的安装副本各 7 项全 PASS
+
 # 排掉"junction 装载时模块加载失败"（另一个插件踩过）：直接按 profile 的路径 import
 #   node --input-type=module -e "const m = await import('file:///<profile>/node_modules/dsh-plugin-branch-origin/lib/index.js'); console.log(m.name)"
 
@@ -103,7 +110,7 @@ node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
 
 ### 5.2 平台约定（照抄工作区内另外两个插件的做法）
 
-- `package.json` 必须声明 `dsh.bundle.patch`；本插件**没有** `dsh.client`（无客户端半边）。
+- `package.json` 必须声明 `dsh.bundle.patch`；客户端半边另需 `exports['./client']` + `dsh.client`（见 §5.4）。
 - 宿主半边插件形态：`export const name` / `export const inject = [...]` / `export function apply(ctx, config)`（官方模板见 `dsh-agent-preset/skills/cordis-plugin-development/references/host-plugin.md`）。
 - `cordis.patch.yml` 只有一行：`- insert: [{ id: branch-origin, name: dsh-plugin-branch-origin }]`。
 - **不写 `export const Config`**：那需要 schemastery（= 一个 import）。宁可少一个可配项，也不破坏零依赖。
@@ -113,6 +120,15 @@ node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
 - 测试用**桩 ctx**（`ctx.on` / `ctx.get` / `ctx.effect` + 假 `sessions` / `sessionTitle`），不 import 宿主包 ⇒ 不需要 `test/register.mjs`。**这是零依赖换来的好处，别弄丢。**
 - `test/register.mjs` + `test/resolve-dsh.mjs` 只服务 `.verify/` 的真机装置；解析钩子**惰性**取 profile（`DSH_PROFILE_DIR` → `DSH_HOME\profiles\desktop` → `%USERPROFILE%\.dsh\profiles\desktop`），因为 `--import` 会在真机脚本设置 `DSH_HOME` 之前加载。
 - 断言要覆盖**反例**：普通会话、子智能体会话、别人改过名的标题、窗口过期后的改名。
+
+### 5.4 客户端半边（[lib/client.js](lib/client.js)）
+
+- 形态：**手写 classic script**（无 ESM 语法），`window.__ModuleLoader__.load({ id: '<包名逐字>', factory })`，factory 末尾 `exports.apply = apply` / `exports.inject = inject` 并 `return module.exports`。只用基座的 `react` 与 `react/jsx-runtime`（9 键白名单）。
+- `inject = ['slots', 'sessions']`；**不注册 locale 字典**（文案是固定中文，无切换需求 —— `register` 的 `locale` 字段是可选的）。
+- 两个只读席位：`sidebar.session.row.leading`（id `branch.origin`，order 21，行首 `⤷` 徽标）与 `sidebar.session.row.hover`（id `branch.origin`，order 40，悬停「来源」段）。**id 必须与 `dsh-plugin-branch` 的不同**（它占了 `branch.count` / `branch.children` / `branch.connected`）。
+- 数据来源：优先官方 root 注入的 `props.useSessions`；缺失时退到本插件用 `ctx.sessions.list` 自建的 `useSyncExternalStore` hook（经 `inject()` 以 `useSessionsStore` 名传给组件）。两者都缺席 ⇒ 组件返回 `null` **缺席**，不抛错。
+- 选择器**必须返回按值稳定的东西**（本项目返回字符串或 `null`）——`useSyncExternalStore` 的快照引用不稳定会无限重渲染（`dsh-plugin-branch` 因此对数组做了 memo，我们靠字符串免掉）。
+- 改完必跑：`npm run client-smoke`（离线协议 + 席位 + 行为 + 降级 + 异常保护）与 `node .verify/check-client-manifest.mjs`（按 `dsh-client-modules` 的规则预检 `dsh.client` / `exports['./client']` / `id` 逐字匹配）。
 
 ## 6. 已知陷阱速查
 
@@ -129,12 +145,20 @@ node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
 | `isSeeded` 的会话构造 | `sessions.create` 里 `isSeeded: true` 必须同时给 `seed` 与 `inheritedEventCount`，否则 `dsh-session/lib/index.js:1340-1341` 直接抛 |
 | `session-title` 的配置 | 三个字段 `fallbackMaxWords` / `fallbackMaxBytes` / `maxTitleBytes` **都是必填**，缺一个整行不激活（真机组合里照抄 `dsh-base/cordis.patch.yml:55-60`） |
 | 插件行不激活时的表现 | 组合日志会说 `pending (waiting for service: ...)`；本插件 `inject` 只有 `sessions` + `sessionTitle`，缺 `sessionQuery` 不影响激活 |
-| `--patch` 位置（若将来用 CLI 实验） | 必须写在 app 参数**之前**：`dsh --profile p --patch x.yml --json "…"` |
+| `--patch` 位置（若将来用 CLI 实验） | 必须写在命令行 app 参数**之前**：`dsh --profile p --patch x.yml --json "…"` |
+| 客户端行的字段名 | 行对象里会话 id 是 **`id`**、父级是 **`parentId`**（宿主摘要的 `sessionId` / `parentSessionId` 在客户端被映射掉了）。用错字段会**静默取到 `undefined`** —— 表现就是徽标一个都不出现。两个键都认才稳 |
+| 客户端半边声明 | 声明了 `dsh.client` 却在 `exports` 里没有 `./client`，`dsh-client-modules` 会**直接抛错**（`declares dsh.client but exports no "./client" bundle`）—— 而客户端组合是全有或全无，所以这条会把**整个 GUI** 拖垮 |
+| `dsh.client.platform` | 必须是 `'web'`；不是 `web` 的包会被当成**非客户端包**静默跳过（不报错，只是你的界面点永远不出现） |
+| `__ModuleLoader__.load` 的 `id` | 必须**逐字等于包名**，否则客户端侧认不出这个模块 |
+| 快照引用稳定性 | `useSyncExternalStore` 的选择器若每次返回**新对象/新数组**，会无限重渲染。返回**字符串**最省事（本项目就是）；返回数组要自己做 memo |
+| 徽标的可见性依赖列表快照 | 徽标读的是官方客户端列表的 `parentId`；**冷会话要等一次列表刷新才有行**（`dsh-plugin-branch` V23 已记录同一现象） |
+| 无法在运行中的桌面应用里验客户端半边 | 客户端"是不是客户端包"的判定被缓存到重启（`dsh-plugin-branch` A-39）⇒ 加/改客户端半边后必须**完全退出并重开**应用 |
 
 ## 7. 交接检查清单
 
-- [ ] `npm test` 全绿（13 项）
+- [ ] `npm test` 全绿（13 项 + 客户端冒烟）
 - [ ] 改过 `lib/`：`npm run rm-test` 全绿（14 项），并把结论写回 [.verify/REPORT.md](.verify/REPORT.md)
+- [ ] 改过 `lib/client.js` 或 `package.json` 的 `dsh.client` / `exports`：`npm run client-smoke` 与 `node .verify/check-client-manifest.mjs` 全绿
 - [ ] 改过 md：`node .verify/md-lint.mjs` 报"未发现结构问题"
 - [ ] 契约相关结论已写进 [docs/DESIGN.md](docs/DESIGN.md)（带 `包/文件:行号`）
 - [ ] 决策变化已记进 DESIGN.md §5，并同步 README 行为表

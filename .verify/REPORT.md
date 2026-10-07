@@ -103,7 +103,7 @@ inject = ["sessions","sessionTitle"]
 
 ## 5. 未覆盖 / 已知限制
 
-- **GUI 目视未做**：装载已完成、组合与模块加载均已预检，但侧栏那一行到底显示成什么样，要在重启后亲眼确认。真机装置是 headless 组合（无 webserver、无客户端半边，本插件也没有客户端半边），覆盖不到 GUI。
+- **GUI 目视未做**：装载已完成、宿主编排与客户端声明均已预检，但侧栏那一行（标题与徽标）到底显示成什么样，要在重启后亲眼确认。真机装置是 headless 组合（无 webserver、不加载客户端半边），覆盖不到 GUI；客户端半边另见 §7。
 - **重启会中断当时的会话**：监听 19387 的是桌面应用自己的进程，重启 = 本会话的服务器断开。这是没有代用户重启的唯一原因。
 - **清单重写风险**：2026-10-07 出现过"应用按自身状态重写 profile 清单，把本地 `link:` 依赖与 bundle 项一起丢掉"。实测应用**启动时**会重写 `cordis.yml`（mtime 与进程启动同秒），但**没有**在启动时重写 `package.json`。真被丢掉就重跑安装脚本（幂等）。
 - **磁盘物化未覆盖**：没有 agent loop 就没人给会话开写入句柄，store 里的会话不会落盘（`dsh-plugin-branch` V13 已记录同一事实）。因此地面真值改用官方 `sessionQuery` 的独立读取通道，而不是读会话文件。
@@ -113,14 +113,51 @@ inject = ["sessions","sessionTitle"]
 
 ```powershell
 cd <repo>
-npm test        # 离线 13 项
+npm test        # 离线 13 项 + 客户端半边冒烟
+npm run client-smoke
 npm run rm-test # 真机 14 项
 node .verify/md-lint.mjs
 
-# 装载与组合预检
+# 装载与预检
 node .verify/install-desktop.mjs --status
+node .verify/check-client-manifest.mjs
 node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
 ```
 
 真机装置全程只写仓库内的 `.verify/home` 与 `.verify/proj`，**不碰用户 `~/.dsh`**。
 只有 `install-desktop.mjs` 写 profile（工作区之外），需要一次性更宽权限。
+
+## 7. 客户端半边（v0.1.1）
+
+背景：用户 2026-10-07 追问"改名会不会抹掉来源" —— 标题里的标签**会**（标签是标题字符串的一部分，且本插件不抢回）。于是按方案 C 增加一条**不依赖标题**的通道：侧栏行上的来源徽标 + 悬停段。见 [docs/DESIGN.md](../docs/DESIGN.md) §5 D009/D010。
+
+### 7.1 离线冒烟（`npm run client-smoke`，[tests/client-smoke.mjs](../tests/client-smoke.mjs)）
+
+在 Node 里用桩 `__ModuleLoader__` 跑真实的 `lib/client.js`，断言：
+
+| 组 | 断言 |
+|---|---|
+| 协议 | 调用 `__ModuleLoader__.load`；`id` 逐字等于包名；导出 `apply`；`inject === ['slots','sessions']`；`require` 只用了基座白名单里的 `react` / `react/jsx-runtime` |
+| 席位 | 恰好注册两个：`sidebar.session.row.leading` 与 `sidebar.session.row.hover`，id 均为 `branch.origin`，且都拿到了组件函数 |
+| 行为 | fork 行渲染出 `⤷` 徽标且 tooltip 为 `来源：源对话`；二级分叉指向它的**直接**来源；源行不在快照里时给 `（未命名对话）` 而不是崩 |
+| 反例 | 无父级的会话、`origin: 'subagent'` 的子智能体会话、快照里不存在的行 ⇒ 一律返回 `null` |
+| 降级 | 两种数据源都缺席时组件返回 `null`（缺席），不抛错 |
+| 异常保护 | 激活期抛错被 `apply` 吞掉，并向控制台记一条 `client half failed to apply` |
+
+### 7.2 客户端声明静态预检（`node .verify/check-client-manifest.mjs`，14/14）
+
+官方没有导出 `parseDshClient`，所以该脚本**复刻**了 `dsh-client-modules/lib/index.js:61-75` 的校验规则与 `:713-728` 的判定顺序（含那句"声明了 `dsh.client` 却没有 `./client` 就抛错"），对**本仓库**与**desktop profile 里的安装副本**各跑一遍：
+
+```
+PASS  name 逐字等于包名 / dsh.client 通过官方校验 / platform === 'web'
+PASS  exports 声明了 './client' / ./client 指向的文件存在
+PASS  client.js 用包名逐字注册 / client.js 有全有或全无的保护
+结果：14/14 通过
+```
+
+这条预检的意义：客户端组合是**全有或全无**，一个包在激活期抛错会拖垮整个 GUI —— 静态预检先把"声明形态"这一类失败排掉。
+
+### 7.3 仍未做的
+
+- **真实浏览器里的目视/机检**（`tasks.csv` B006）：需要在 trial 或重启后的 desktop 上跑 CDP 驱动，断言 `[data-slot="sidebar.session.row.leading"]` 里出现徽标、悬停出现「来源」段、控制台无客户端组合错误。本机 Chrome 可用（`<chrome>`），驱动套路见 `dsh-plugin-branch\.verify\connected-nodes-drive.mjs`；本轮没有执行，因为需要另起一个 web 服务，而 desktop 正被本会话占用。
+- 因此 §7.1/§7.2 是**离线**证据；"徽标在真实 DOM 里长什么样"仍是未验证。
