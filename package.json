@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-branch-origin",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "分支联系：给 DSH 里分叉出来的会话标上它来自哪个对话 —— 标题带上「⤷ 来源：<源会话标题>」，侧栏行另有一个不受改名影响的来源徽标。零依赖、无构建链。",
   "type": "module",
   "main": "lib/index.js",

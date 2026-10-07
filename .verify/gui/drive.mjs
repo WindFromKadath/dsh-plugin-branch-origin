@@ -220,6 +220,7 @@ try {
   // 悬停分叉行 → 悬停卡里应出现「来源」段。
   // 官方 HoverCard 有 800ms 打开延迟，且要两次 mouseMoved（第二次偏 +2/+1）才稳定触发 React enter。
   let hoverText = ''
+  let hoverColors = null
   if (withBadge.length >= 1 && withBadge[0].rect !== null) {
     const target = withBadge[0].rect
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(target.x), y: Math.round(target.y), button: 'none', buttons: 0 })
@@ -227,19 +228,69 @@ try {
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: Math.round(target.x) + 2, y: Math.round(target.y) + 1, button: 'none', buttons: 0 })
     for (let i = 0; i < 12; i++) {
       await sleep(500)
-      hoverText = await evaluate(cdp, `(() => {
-        const nodes = [...document.querySelectorAll('[data-slot="sidebar.session.row.hover"]')]
-        return nodes.map((n) => (n.innerText || '').replace(/\\s+/g, ' ').trim()).filter((t) => t.includes('来源')).join(' | ')
+      const probe = await jsonEval(cdp, `(() => {
+        const color = (el) => (el ? getComputedStyle(el).color : null)
+        const official = (cls) => document.querySelector('[class*="_' + cls + '"]')
+        const host = document.querySelector('[data-slot="sidebar.session.row.hover"]')
+        if (!host) return { text: '', colors: null }
+        const all = [...host.querySelectorAll('div, span')]
+        const title = all.find((el) => el.childElementCount === 0 && (el.textContent || '').trim() === '来源')
+        const label = host.querySelector('span[title]')
+        const glyph = all.find((el) => (el.textContent || '').trim() === '⤷')
+        const card = host.closest('[data-menu-material]') || host.parentElement
+        // 卡片真正上色的那一层不一定是 material 本身（可能透明），往上找第一个不透明背景
+        const paintedBg = (el) => {
+          let node = el
+          while (node) {
+            const bg = getComputedStyle(node).backgroundColor
+            if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return bg
+            node = node.parentElement
+          }
+          return null
+        }
+        return {
+          text: (host.innerText || '').replace(/\\s+/g, ' ').trim(),
+          colors: {
+            ourTitle: color(title),
+            ourLabel: color(label),
+            ourGlyph: color(glyph),
+            officialTitle: color(official('hoverTitle')),
+            officialTime: color(official('hoverTime')),
+            cardBg: paintedBg(card),
+          },
+        }
       })()`)
-      if (hoverText.includes('源对话')) break
+      hoverText = probe.text
+      hoverColors = probe.colors
+      if (hoverText.includes('来源')) break
     }
   }
   check('A6 悬停分叉行时出现「来源」段', hoverText.includes('来源'), {
     hoverText: hoverText.slice(0, 300),
   })
 
+  // 颜色回归防线：悬停卡是**深色菜单材质，文字颜色写死**（官方 `.hoverTitle{color:#fff}`、
+  // `.hoverTime{color:#cfd3d6}`）。卡片里若用主题 token（`--dsw-alias-label-primary`），
+  // 在浅色主题作用域会解析成近黑 `#0f1115`，与卡片背景 `#2c2c2e` 同色 → 字看不见。
+  // 用户 2026-10-07 报的"字色有问题"就是这个，这两条断言防它回归。
+  check(
+    'A7 悬停段字色与官方悬停卡一致（卡片内不用主题 token）',
+    hoverColors !== null
+      && hoverColors.ourLabel === hoverColors.officialTitle
+      && hoverColors.ourTitle === hoverColors.officialTime
+      && hoverColors.ourLabel === 'rgb(255, 255, 255)',
+    hoverColors,
+  )
+  check(
+    'A8 悬停段字色与卡片背景不同（不是同色隐形）',
+    hoverColors !== null && hoverColors.cardBg !== null
+      && hoverColors.ourLabel !== hoverColors.cardBg
+      && hoverColors.ourTitle !== hoverColors.cardBg,
+    { ourLabel: hoverColors?.ourLabel, ourTitle: hoverColors?.ourTitle, cardBg: hoverColors?.cardBg },
+  )
+
   const ours = consoleErrors.filter((line) => String(line).includes('branch-origin') || String(line).includes('did not activate'))
-  check('A7 控制台没有本插件/客户端组合的错误', ours.length === 0, { ours, totalErrors: consoleErrors.length })
+  check('A9 控制台没有本插件/客户端组合的错误', ours.length === 0, { ours, totalErrors: consoleErrors.length })
 
   console.log('\n── 控制台错误（全部）──')
   console.log(JSON.stringify(consoleErrors.slice(0, 10), null, 2))

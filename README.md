@@ -88,6 +88,7 @@ node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整�
 | 真机端到端（14 项，真 Loader / 真 SessionStore / 真 session-title / 真 session-query） | `npm run rm-test` |
 | 预检：按 `dsh-client-modules` 的规则核对 `dsh.client` 声明 | `node .verify/check-client-manifest.mjs` |
 | 预检：复现 desktop profile 的宿主编排 | `node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs` |
+| **GUI 真机：无头 Chrome + CDP 断言侧栏行/徽标/悬停段/字色（9 项）** | 见 [.verify/REPORT.md](.verify/REPORT.md) §7.3 的运行步骤 |
 | 文档结构 lint | `node .verify/md-lint.mjs` |
 
 真机装置在仓库内的临时 `DSH_HOME`（`.verify/home`）里启动真 DSH 运行时，**不碰用户 `~/.dsh`**、不开端口、不调模型。证据与结论见 [.verify/REPORT.md](.verify/REPORT.md)。
@@ -100,7 +101,8 @@ node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整�
 - **标注窗口**：fork 之后约 4.6 秒内（`settleMs 600` + `graceMs 4000`）会持续收敛标题；此窗口内用户手动改名**不会**被覆盖（改名后标题不再是继承形态），但若有人把标题改成恰好等于 `<源标题> (N)` 则可能被贴上标记。
 - **标题会被钉住**：走的是 `sessionTitle.rename()`，即 `source: { kind: 'user' }`。对 fork 子会话无副作用 —— first-prompt 标题提供方本来就跳过带父级的会话；但请勿把本插件用于给**非 fork** 会话命名。
 - **`maxTitleBytes` 会截断**：DSH 默认 80 字节，源标题很长时官方 `rename` 会截断尾部；截断保留头部，所以 `⤷ 来源：` 前缀仍在。
-- **客户端半边未在浏览器里目视确认**：协议与席位注册有离线冒烟 + 官方规则的静态预检，但"徽标在真实 DOM 里长什么样"要在重启后看（见 [.verify/REPORT.md](.verify/REPORT.md) §7）。
+- **客户端半边已在真实浏览器里机检**（无头 Chrome + CDP，9 项全通过：侧栏行、徽标、tooltip、悬停段、字色、控制台零错误）——见 [.verify/REPORT.md](.verify/REPORT.md) §7.3。
+- **悬停段的字色是跟着官方悬停卡写死的**：官方悬停卡是深色菜单材质，它自己的 CSS 里把文字颜色写成 `#fff` / `#cfd3d6` / `#adb2b8`，**不走主题 token**。所以本插件的悬停段也用这几个固定色（v0.1.1 曾用 `--dsw-alias-label-primary`，在卡片里会解析成浅色主题的近黑值、与卡片背景同色 ⇒ 字看不见；v0.1.2 修正）。若 DSH 之后改了卡片配色，这里要跟着改（GUI 真机的 A7/A8 断言会报警）。
 - **不做**：不创建分叉、不搬子 agent、不画树、不改 parent pointer、不写 sidecar、不注册任何模型可见工具、不占 `single` 占位、不覆盖官方行。
 
 ## 与同类插件的关系

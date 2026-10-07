@@ -157,7 +157,7 @@ PASS  client.js 用包名逐字注册 / client.js 有全有或全无的保护
 
 这条预检的意义：客户端组合是**全有或全无**，一个包在激活期抛错会拖垮整个 GUI —— 静态预检先把"声明形态"这一类失败排掉。
 
-### 7.3 GUI 真机（无头 Chrome + CDP）：**7/7 通过**
+### 7.3 GUI 真机（无头 Chrome + CDP）：**9/9 通过**
 
 装置是**仓库内自包含**的，全程不碰用户 `~/.dsh`、不动 desktop：
 
@@ -165,8 +165,10 @@ PASS  client.js 用包名逐字注册 / client.js 有全有或全无的保护
 |---|---|
 | [gui/setup.mjs](gui/setup.mjs) | 建临时 `DSH_HOME`（`.verify/gui/home`）与临时 `gui` profile；只把用户真实的 `profiles/node_modules` 当**只读**锚点用来解析官方包 |
 | [gui/fixture/](gui/fixture/) | 一次性夹具插件：用官方 `sessionPersistence.create → append → flush → close` 落盘两个会话，子会话 header 带 `parentSession`，再挂进工作区注册表 |
-| [gui/drive.mjs](gui/drive.mjs) | 无头 Chrome + CDP：开页面、关引导弹窗、展开侧栏、断言行/徽标/悬停/控制台 |
+| [gui/drive.mjs](gui/drive.mjs) | 无头 Chrome + CDP：开页面、关引导弹窗、展开侧栏、断言行/徽标/悬停/**字色**/控制台 |
 | [gui/probe-page.mjs](gui/probe-page.mjs) | 页面结构探针（定位"为什么没有行"时用） |
+| [gui/probe-color.mjs](gui/probe-color.mjs) | 计算样式探针（定位字色问题：浅色/深色各量一次） |
+| [gui/probe-cdp2.mjs](gui/probe-cdp2.mjs) | 区分"CDP 传输坏了"与"页面目标没有渲染进程" |
 
 运行：`node .verify/gui/setup.mjs` → 用临时 `DSH_HOME` 起 `--profile gui --port 0 --no-open` → `node .verify/gui/drive.mjs <CDP端口> <页面URL>`。
 
@@ -177,24 +179,60 @@ PASS  A1 页面加载完成  {"state":"complete"}
 PASS  A2 侧栏出现会话行（夹具的源会话 + 分叉子会话）  {"rows":2}
 PASS  A3 分叉行的行首出现来源徽标
       {"rowKey":"session:session-fixture-fork","badgeText":"⤷",
-       "badgeTitle":"来源：dsh-plugin-branch-origin","slotText":"⤷","rowText":"⤷ 未命名 1分钟"}
+       "badgeTitle":"来源：dsh-plugin-branch-origin","slotText":"⤷","rowText":"⤷ 未命名 11分钟"}
 PASS  A4 徽标 tooltip 是来源标注（`来源：<源对话标题>`）  {"titles":["来源：dsh-plugin-branch-origin"]}
 PASS  A5 没有父级的行不带徽标  {"rows":1}
 PASS  A6 悬停分叉行时出现「来源」段  {"hoverText":"来源 ⤷ dsh-plugin-branch-origin"}
-PASS  A7 控制台没有本插件/客户端组合的错误  {"ours":[],"totalErrors":0}
+PASS  A7 悬停段字色与官方悬停卡一致（卡片内不用主题 token）
+      {"ourTitle":"rgb(207, 211, 214)","ourLabel":"rgb(255, 255, 255)","ourGlyph":"rgb(173, 178, 184)",
+       "officialTitle":"rgb(255, 255, 255)","officialTime":"rgb(207, 211, 214)","cardBg":"rgb(44, 44, 46)"}
+PASS  A8 悬停段字色与卡片背景不同（不是同色隐形）
+      {"ourLabel":"rgb(255, 255, 255)","ourTitle":"rgb(207, 211, 214)","cardBg":"rgb(44, 44, 46)"}
+PASS  A9 控制台没有本插件/客户端组合的错误  {"ours":[],"totalErrors":0}
 
-结果：7/7 通过
+结果：9/9 通过
 ```
 
 三条最要紧的结论：
 
-1. **客户端组合在真实浏览器里加载成功、零错误** —— "全有或全无"会拖垮整个 GUI 的风险被实测排除（A7 + A1）。这是重启前最需要确认的一条。
+1. **客户端组合在真实浏览器里加载成功、零错误** —— "全有或全无"会拖垮整个 GUI 的风险被实测排除（A9 + A1）。这是重启前最需要确认的一条。
 2. **徽标只出现在"有父级"的那一行**：分叉行 `session:session-fixture-fork` 有 `⤷`，源行 `session:session-fixture-source` 没有（A3/A5 成对反例）。
-3. **悬停段的文案确实渲染出来**：`来源 ⤷ dsh-plugin-branch-origin`（A6）。
+3. **悬停段的文案与字色都正确**（A6/A7/A8）。
 
 **一处诚实的折扣**：tooltip 里的来源名是 `dsh-plugin-branch-origin`（cwd 目录名），不是夹具写的 `源对话`。原因是夹具造的是**冷会话**，而客户端列表的标题只来自 projection cache，未 engage 的会话没有缓存 ⇒ 官方 `displayTitle` 退回 cwd 目录名（`dsh-plugin-branch` V23 记录过同一现象）。真实 GUI 里的 fork 子会话是 live 的、父会话本来就有投影标题，所以实际会显示真名。试过用 `sessionController.rename` 把夹具会话 resume 成 live 来消掉这个折扣，**实测反而弄坏夹具**（子会话从列表消失、源行变 blank），已回退并把这个坑记进 AGENTS §6。
 
+### 7.3.1 用户真机报的"字色有问题"（v0.1.2 修复）
+
+用户重启 desktop 后在真实悬停卡上看到：官方文字白/浅灰，**我们那两行几乎看不见**。采样用户截图（353×211）得到的像素：
+
+| 位置 | 最亮像素 | 判定 |
+|---|---|---|
+| 卡片背景 | `rgb(44,44,46)` | 深色菜单材质 |
+| 官方标题 `⤷ 来源：分支显示插件 (1)` | `rgb(255,255,255)` | `#fff` |
+| 官方时间 `刚刚` | `rgb(207,211,214)` | `#cfd3d6` |
+| **我们的 `来源`** | `rgb(44,44,46)` | **与背景同色 ⇒ 隐形** |
+| **我们的 `⤷` + 源对话名** | 字形 `rgb(129,133,140)`、文字同背景色 | 字形勉强可见、文字隐形 |
+| 官方状态 `● 空闲` | `rgb(212,212,212)` | `#adb2b8` + 状态点 |
+
+根因（读官方源码 + 计算样式探针双重确认）：**悬停卡是深色菜单材质，它自己的 CSS module 把文字颜色写死**，不走主题 token ——
+
+```css
+.YDXeBa_hoverTitle {color:#fff;    font-size:14px; line-height:20px}
+.YDXeBa_hoverTime  {color:#cfd3d6; font-size:12px; line-height:16px}
+.YDXeBa_hoverStatus{color:#adb2b8; font-size:12px; line-height:20px}
+```
+
+（`dsh-client-ui-workspace/lib/client.js` 的 `Rows.module.css`；`SessionHoverContent` 在 `:1459-1483`。）
+
+而 v0.1.1 的悬停段用的是 `var(--dsw-alias-label-primary)` / `var(--dsw-alias-label-tertiary)`。在卡片那个作用域里 `--dsw-alias-label-primary` 解析成**浅色主题的近黑值 `#0f1115`**（探针实测：`body` 上该 token = `#0f1115`，`documentElement` 上没有定义），于是深色卡片上等于同色、字隐形；tertiary `#81858c` 勉强可见但风格不一致。
+
+**修法**：卡片内一律改用卡片自己的固定色 —— `hoverTitle` → `#cfd3d6`（对齐 `.hoverTime`）、`hoverLabel` → `#fff`（对齐 `.hoverTitle`）、`hoverGlyph` → `#adb2b8`（对齐 `.hoverStatus`）。卡片**外**（行内徽标）继续用主题 token（那里是正常的主题作用域）。
+
+新增 A7/A8 两条**颜色回归断言**：A7 要求我们的字色与官方卡片逐字一致，A8 要求字色与卡片实际底色不同 —— 这类"看不见"的问题以后会被自动抓住。
+
+> 注意：v0.1.1 的 7/7 是**只查文字内容、没查颜色**得来的，所以没暴露这个问题；装置当时跑的还是浅色主题。教训：**客户端界面的验证必须包含计算样式（颜色/字号），不能只看 `innerText`**。
+
 ### 7.4 仍未做的
 
-- 只在**无头 Chrome + 临时 profile** 上验过；用户真实 `desktop` GUI 里的目视（重启后）仍是最后一步（`tasks.csv` B004）。
+- 只在**无头 Chrome + 临时 profile** 上验过；用户真实 `desktop` GUI 里的目视仍需用户在重启后确认（`tasks.csv` B004）。
 - 与 `dsh-plugin-branch` 同装时的徽标并存未实测：本装置只装了本插件 + 夹具，所以 `drive.mjs` 的徽标选择器已按 `title^="来源："` 过滤（避免取到同槽里的「⇄」徽标），但"两个徽标同时在同一行"没有真机跑过。

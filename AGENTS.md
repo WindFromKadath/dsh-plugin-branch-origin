@@ -10,11 +10,11 @@
 
 | 项 | 状态 |
 |---|---|
-| 版本 | `0.1.1`，纯 JS、**零依赖**、无构建链、不注册任何工具；**两个半边**（宿主 + 客户端） |
+| 版本 | `0.1.2`，纯 JS、**零依赖**、无构建链、不注册任何工具；**两个半边**（宿主 + 客户端） |
 | 实现 | 宿主：[lib/index.js](lib/index.js)（约 210 行）+ [cordis.patch.yml](cordis.patch.yml) 一行。客户端：[lib/client.js](lib/client.js)（手写 classic script，只用基座的 `react` / `react/jsx-runtime`） |
 | 核心机制 | 宿主：挂 `session/created`（带 `{ global: true }`）识别 fork，等 600ms 后改标题；再挂 `session/event` 的 `session/title` 做收敛。客户端：在 `sidebar.session.row.leading` 与 `...row.hover` 上按官方列表行的父级字段渲染来源 |
-| 验证 | 离线 13/13 + 客户端冒烟（`npm test`）；真机 14/14（`npm run rm-test`）；客户端声明静态预检 14/14；**GUI 真机 7/7**（无头 Chrome + CDP，仓库内自包含装置）；见 [.verify/REPORT.md](.verify/REPORT.md) |
-| 已装载的 profile | **`desktop`（2026-10-07 装入，待用户重启生效）**。装载 [.verify/install-desktop.mjs](.verify/install-desktop.mjs)，宿主编排预检 [.verify/diagnose-desktop-compose.mjs](.verify/diagnose-desktop-compose.mjs) |
+| 验证 | 离线 13/13 + 客户端冒烟（`npm test`）；真机 14/14（`npm run rm-test`）；客户端声明静态预检 14/14；**GUI 真机 9/9**（无头 Chrome + CDP，仓库内自包含装置，含字色断言）；见 [.verify/REPORT.md](.verify/REPORT.md) |
+| 已装载的 profile | **`desktop`（2026-10-07 装入，改代码后重启应用即可生效）**。装载 [.verify/install-desktop.mjs](.verify/install-desktop.mjs)，宿主编排预检 [.verify/diagnose-desktop-compose.mjs](.verify/diagnose-desktop-compose.mjs) |
 | 定位 | 差异点是**入口覆盖**：同类插件只标注自己创建的分叉，本插件覆盖官方原生 fork。见 [docs/PRIOR-ART.md](docs/PRIOR-ART.md) |
 
 **文档地图**
@@ -99,8 +99,10 @@ node .verify/gui/setup.mjs                       # 建临时 DSH_HOME + 临时 g
 #   chrome --headless --no-sandbox --disable-crash-reporter --disable-breakpad \
 #          --remote-debugging-port=9333 --user-data-dir=<工作区内的临时目录> about:blank
 node .verify/gui/drive.mjs 9333 '<带 token 的页面 URL>'
-#   期望：A1–A7 全 PASS（页面加载 / 有行 / 分叉行有徽标 / tooltip 是来源标注 / 源行无徽标 / 悬停有「来源」段 / 控制台零错误）
+#   期望：A1–A9 全 PASS（页面加载 / 有行 / 分叉行有徽标 / tooltip 是来源标注 / 源行无徽标 /
+#         悬停有「来源」段 / 字色与官方卡片一致 / 字色 ≠ 卡片底色 / 控制台零错误）
 node .verify/gui/probe-page.mjs 9333 '<URL>'      # 页面结构探针：排查"为什么没有行"时用
+node .verify/gui/probe-color.mjs 9333 '<URL>'     # 计算样式探针：排查"字色/看不见"时用（浅色深色各量一次）
 
 # 排掉"junction 装载时模块加载失败"（另一个插件踩过）：直接按 profile 的路径 import
 #   node --input-type=module -e "const m = await import('file:///<profile>/node_modules/dsh-plugin-branch-origin/lib/index.js'); console.log(m.name)"
@@ -175,13 +177,15 @@ node .verify/gui/probe-page.mjs 9333 '<URL>'      # 页面结构探针：排查"
 | 首屏引导弹窗 | 「添加一个 API Key」弹窗要等约 6 秒才渲染；不点掉「稍后配置」，侧栏就打不开，整轮断言全是 0 行 |
 | `job_kill` 不等于杀进程 | 它只停作业壳；实测残留 4 个 `dsh web` 服务进程，会**握着会话写句柄**，导致下一次夹具报 `SessionAlreadyOwnedError`。收尾要显式杀 node/chrome 进程 |
 | 别用 `$home` / `$pid` 当变量名 | PowerShell 里它们是只读自动变量（大小写不敏感），赋值静默失败，清理脚本会"看起来跑了但什么都没删" |
+| **悬停卡里的文字颜色不能走主题 token** | 悬停卡是**深色菜单材质，官方 CSS module 把文字颜色写死**：`.hoverTitle{color:#fff}` / `.hoverTime{color:#cfd3d6}` / `.hoverStatus{color:#adb2b8}`（`dsh-client-ui-workspace` 的 `Rows.module.css`；`SessionHoverContent` 在 `lib/client.js:1459-1483`）。在那个作用域里 `--dsw-alias-label-primary` 会解析成**浅色主题的近黑值 `#0f1115`**，与卡片背景 `#2c2c2e` 同色 ⇒ **字隐形**（v0.1.1 的真实缺陷，用户 2026-10-07 报的"字色有问题"）。卡片内用卡片自己的固定色；卡片外（行内徽标）才用主题 token |
+| 客户端界面的验证必须查计算样式 | 只断言 `innerText` **发现不了"字和背景同色"** —— v0.1.1 的 7/7 全绿却漏了这个缺陷。`.verify/gui/drive.mjs` 的 A7/A8 就是为此加的：A7 要求字色与官方卡片逐字一致，A8 要求字色 ≠ 卡片实际底色（底色要往上找第一个**不透明**祖先，`[data-menu-material]` 本身可能是透明的） |
 
 ## 7. 交接检查清单
 
 - [ ] `npm test` 全绿（13 项 + 客户端冒烟）
 - [ ] 改过 `lib/`：`npm run rm-test` 全绿（14 项），并把结论写回 [.verify/REPORT.md](.verify/REPORT.md)
 - [ ] 改过 `lib/client.js` 或 `package.json` 的 `dsh.client` / `exports`：`npm run client-smoke` 与 `node .verify/check-client-manifest.mjs` 全绿
-- [ ] 改过客户端界面：跑一遍 `.verify/gui/` 那套 GUI 真机（A1–A7 全 PASS），并把结论写回 [.verify/REPORT.md](.verify/REPORT.md) §7.3
+- [ ] 改过客户端界面：跑一遍 `.verify/gui/` 那套 GUI 真机（A1–A9 全 PASS，含字色断言），并把结论写回 [.verify/REPORT.md](.verify/REPORT.md) §7.3
 - [ ] 改过 md：`node .verify/md-lint.mjs` 报"未发现结构问题"
 - [ ] 契约相关结论已写进 [docs/DESIGN.md](docs/DESIGN.md)（带 `包/文件:行号`）
 - [ ] 决策变化已记进 DESIGN.md §5，并同步 README 行为表
