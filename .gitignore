@@ -29,3 +29,22 @@ credentials.yaml
 .verify/gui/home/
 .verify/gui/chrome-*/
 .verify/gui/*.txt
+
+# 隐私模块的忽略片段（来自「AI 协作与项目开发」库 02-隐私与发布/模板/gitignore.fragment）
+# 逐项合并；已跟踪内容和历史不会因添加规则而清除。`.env` / `.env.*` 已在上面列出。
+!.env.example
+!.env.sample
+!.env.template
+.privacy.local.json
+privacy-report*.json
+private-audit/
+private-backup/
+raw-sessions/
+*.original.bundle
+*.pem
+*.key
+id_rsa
+id_ed25519
+credentials.json
+auth.json
+settings.local.json

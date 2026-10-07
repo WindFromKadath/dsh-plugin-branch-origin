@@ -21,11 +21,13 @@
 
 | 文档 | 回答什么 | 什么时候改 |
 |---|---|---|
-| [README.md](README.md) | 用户视角：用途、行为表、安装、限制 | 行为/安装/限制变化时 |
-| [docs/DESIGN.md](docs/DESIGN.md) | 宿主契约（逐条带 `包/文件:行号`）+ 判定规则 + 决策记录 D001–D010 | 契约核实结果、判定规则、决策变化时 |
+| [README.md](README.md) / [README.zh-CN.md](README.zh-CN.md) | 用户视角（English 主入口 + 中文）：用途、行为、安装、限制、许可 | 行为/安装/限制变化时，**两版同步改** |
+| [MAINTAINER.md](MAINTAINER.md) | 作者侧维护入口：本轮范围、作者理解、已采纳取舍、验收、隐私检查实测结果 | 每轮维护、公开发布前 |
+| [docs/DESIGN.md](docs/DESIGN.md) | 宿主契约（逐条带 `包/文件:行号`）+ 判定规则 + 决策记录 D001–D011 | 契约核实结果、判定规则、决策变化时 |
 | [docs/PRIOR-ART.md](docs/PRIOR-ART.md) | 先行者核查（外部资料，非契约依据） | 再做生态调研时 |
 | [tasks.csv](tasks.csv) | 任务与验收 | 每轮工作 |
 | [.verify/REPORT.md](.verify/REPORT.md) | 真机验证报告与证据 | 每次做真机验证后 |
+| [.privacy-tools/README.md](.privacy-tools/README.md) | 提交前隐私检查怎么跑、查什么、实测结果与已知误报 | 检查模块或结果变化时 |
 
 ## 2. 硬性纪律
 
@@ -43,10 +45,10 @@
 ```text
 DSH_HOME        默认 %USERPROFILE%\.dsh；profiles: desktop / trial / branch-e2e / web
 官方宿主源码    <npm-global>\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\*   ← 只读
-                （本机 <npm-global> = <npm-global>）
-本仓库          <repo> = <repo>
+                （<npm-global> 取 `npm root -g`；本机它也用作桌面应用的锚点）
+本仓库          <repo> = 本仓库根目录（`git rev-parse --show-toplevel`）
 运行时版本      DSH 0.2.0-rc.2（Node v24.18.0）
-desktop 应用    <app-dir>\resources\app.asar（**注意目录名里有一个空格**；
+desktop 应用    <app> = 桌面应用安装目录下的 resources\app.asar（**注意目录名里有一个空格**；
                 里面是打包文件，普通 Node 读不到内部路径 ⇒ 组合预检改用同版本的全局 CLI 作锚点）
 desktop profile %USERPROFILE%\.dsh\profiles\desktop（GUI 正由该 profile 服务，改它要重启应用）
 ```
@@ -79,12 +81,18 @@ npm run check
 node .verify/md-lint.mjs
 node .verify/md-lint.mjs README.md docs/DESIGN.md      # 只查指定文件
 
+# 提交前隐私检查（只读；本仓库内的模块副本，日常用 Staged）
+pwsh -NoProfile -File .privacy-tools\Invoke-PrivacyCheck.ps1 -Repo . -Mode Staged -Policy .privacy-tools\privacy-policy.json
+#   期望：0 阻断项。Index / History 会把脚本自身报 1 项 —— 那是工具的已知误报，见 .privacy-tools/README.md
+
 # profile 装载（写工作区外 ⇒ 需要一次性更宽权限）
 node .verify/install-desktop.mjs --status     # 只读：依赖声明 / bundle 启用 / 目录链接
 node .verify/install-desktop.mjs              # 安装（幂等，可重复跑来修复）
 node .verify/install-desktop.mjs --uninstall  # 精准卸载（不从备份整体还原）
 
 # 重启前的组合预检（只读；用 app-boot 自己的组合函数复现 desktop profile）
+#   锚点路径不写死在脚本里：先给出全局安装根，或用 DSH_ANCHOR_GLOBAL / DSH_ANCHOR_APP 直接指定 dsh 的 package.json
+$env:NPM_GLOBAL_ROOT = (npm root -g)
 node --import ./test/register.mjs .verify/diagnose-desktop-compose.mjs
 #   期望：8 层全加载、0 跳过、组合条目含 { id: 'branch-origin', name: 'dsh-plugin-branch-origin' }
 
@@ -196,4 +204,4 @@ node .verify/gui/probe-color.mjs 9333 '<URL>'     # 计算样式探针：排查"
 
 - 提交信息：`<类型>: <一句话>`，类型取 `feat` / `fix` / `docs` / `test` / `chore`。
 - 作者身份是仓库本地中性设置（`dev@localhost`），不写个人邮箱。
-- **永不提交**：`.verify/*.jsonl|*.yml|*.txt`、任何凭证、`node_modules/`、`.verify/home/`、`.verify/proj/`。
+- **永不提交**：`.verify/` 下的运行时产物（`*.jsonl`、`*.yml`、`*.txt`，以及 `home`、`proj` 子目录）、任何凭证、`node_modules/`。

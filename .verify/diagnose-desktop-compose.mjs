@@ -18,13 +18,19 @@ const profileDir = process.env.DSH_PROFILE_DIR ?? join(dshHome, 'profiles', 'des
 
 // 组合锚点：应用自带的 dsh 在 app.asar 里，普通 Node 读不到其内部路径；
 // 用**同版本**的全局安装副本作为锚点即可复现 bundle 解析（本机两者都是 0.2.0-rc.2）。
+// 路径不写死在本文件里（隐私检查会把盘符绝对路径列为阻断项），按下面的环境变量给：
+//   DSH_ANCHOR_GLOBAL / DSH_ANCHOR_APP  —— 直接指定 dsh 的 package.json
+//   NPM_GLOBAL_ROOT                     —— `npm root -g` 的输出（即全局 node_modules 目录本身）
+//   ProgramFiles                        —— 系统变量，用于推导桌面应用的解包目录
 const anchors = [
-  '<npm-global>\\node_modules\\@deepseek-ai\\dsh\\package.json',
-  '<app-dir>\\resources\\app.asar.unpacked\\dsh\\package.json',
-].filter((path) => existsSync(path))
+  process.env.DSH_ANCHOR_GLOBAL,
+  process.env.DSH_ANCHOR_APP,
+  process.env.NPM_GLOBAL_ROOT === undefined ? undefined : join(process.env.NPM_GLOBAL_ROOT, '@deepseek-ai', 'dsh', 'package.json'),
+  process.env.ProgramFiles === undefined ? undefined : join(process.env.ProgramFiles, 'DeepSeek Harness', 'resources', 'app.asar.unpacked', 'dsh', 'package.json'),
+].filter((path) => typeof path === 'string' && path !== '' && existsSync(path))
 
 if (anchors.length === 0) {
-  console.error('找不到任何 dsh 安装锚点')
+  console.error('找不到任何 dsh 安装锚点；请设置 DSH_ANCHOR_GLOBAL（或 NPM_GLOBAL_ROOT）指向全局安装的 dsh')
   process.exitCode = 1
   process.exit()
 }

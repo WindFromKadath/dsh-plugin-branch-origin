@@ -19,7 +19,10 @@ import { fileURLToPath } from 'node:url'
 
 const port = Number(process.argv[2])
 const pageUrl = process.argv[3]
-const chromePath = process.argv[4] ?? '<chrome>'
+// Chrome 路径：命令行 > `CHROME_PATH` 环境变量 > 系统 `ProgramFiles` 下的默认安装位置。
+// 不写死本机路径，避免把机器信息带进仓库（隐私检查会把盘符绝对路径列为阻断项）。
+const defaultChrome = process.env.ProgramFiles === undefined ? '' : join(process.env.ProgramFiles, 'Google/Chrome/Application/chrome.exe')
+const chromePath = process.argv[4] ?? process.env.CHROME_PATH ?? defaultChrome
 
 if (Number.isFinite(port) === false || !pageUrl) {
   console.error('用法：node .verify/gui/drive.mjs <cdp端口> <页面URL> [chrome路径]')
